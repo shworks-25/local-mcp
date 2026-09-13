@@ -17,12 +17,15 @@ import {
 } from '@modelcontextprotocol/node';
 
 import {
-    logger,
+    getLogger,
 } from '@shworks/local-core';
 
 import {
     buildServer,
 } from './server.js';
+
+const httpLogger =
+    getLogger('mcp:http');
 
 export interface HttpServerOptions {
     host?: string;
@@ -254,6 +257,20 @@ export function startHttpServer(
                         options.authToken,
                     )
                 ) {
+                    httpLogger.warn(
+                        {
+                            ip:
+                                req.socket.remoteAddress,
+                            method:
+                                req.method,
+                            path:
+                                url.pathname,
+                            userAgent:
+                                req.headers['user-agent'],
+                        },
+                        'Security audit: unauthorized MCP request rejected',
+                    );
+
                     res.setHeader(
                         'WWW-Authenticate',
                         'Bearer realm="shworks-devkit"',
@@ -285,7 +302,7 @@ export function startHttpServer(
         port,
         host,
         () => {
-            logger.info(
+            httpLogger.info(
                 {
                     host,
                     port,
@@ -307,7 +324,7 @@ export function startHttpServer(
     async function shutdown(
         signal: string,
     ) {
-        logger.info(
+        httpLogger.info(
             {
                 signal,
             },
@@ -321,7 +338,7 @@ export function startHttpServer(
         } catch (
             error
             ) {
-            logger.error(
+            httpLogger.error(
                 {
                     error,
                 },

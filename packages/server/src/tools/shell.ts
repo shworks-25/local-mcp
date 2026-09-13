@@ -13,6 +13,11 @@ import {
     safeResult,
 } from '../result.js';
 
+/**
+ * 注册 Shell 任务执行相关 MCP 工具。
+ *
+ * 目的在于允许模型以受控方式执行项目中预先配置的合法构建与维护脚本。
+ */
 export function registerShellTools(
     server: McpServer,
 ): void {
@@ -46,6 +51,10 @@ export function registerShellTools(
                         resolved,
                         task,
                     );
+                },
+                {
+                    toolName: 'run_task',
+                    params: { project, task },
                 },
             ),
     );

@@ -15,6 +15,11 @@ import {
     safeResult,
 } from '../result.js';
 
+/**
+ * 注册 Git 操作相关 MCP 工具。
+ *
+ * 目的在于向模型暴露安全受控的代码版本管理查询能力，包括分支状态、工作区差异与提交历史。
+ */
 export function registerGitTools(
     server: McpServer,
 ): void {
@@ -43,6 +48,10 @@ export function registerGitTools(
                     return gitStatus(
                         resolved,
                     );
+                },
+                {
+                    toolName: 'git_status',
+                    params: { project },
                 },
             ),
     );
@@ -80,6 +89,10 @@ export function registerGitTools(
                             staged,
                         },
                     );
+                },
+                {
+                    toolName: 'git_diff',
+                    params: { project, staged },
                 },
             ),
     );
@@ -119,6 +132,10 @@ export function registerGitTools(
                         resolved,
                         limit,
                     );
+                },
+                {
+                    toolName: 'git_log',
+                    params: { project, limit },
                 },
             ),
     );

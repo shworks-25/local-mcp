@@ -18,6 +18,11 @@ import {
     safeResult,
 } from '../result.js';
 
+/**
+ * 注册文件系统相关 MCP 工具。
+ *
+ * 目的在于向模型提供针对项目目录内文件的读取、批量读取、全文检索、目录树探查以及精准写入替换等安全受限的文件系统能力。
+ */
 export function registerFileTools(
     server: McpServer,
 ): void {
@@ -51,6 +56,10 @@ export function registerFileTools(
                         resolved,
                         path,
                     );
+                },
+                {
+                    toolName: 'read_file',
+                    params: { project, path },
                 },
             ),
     );
@@ -90,6 +99,10 @@ export function registerFileTools(
                         resolved,
                         paths,
                     );
+                },
+                {
+                    toolName: 'read_files',
+                    params: { project, paths },
                 },
             ),
     );
@@ -135,6 +148,10 @@ export function registerFileTools(
                         maxResults,
                     );
                 },
+                {
+                    toolName: 'search_text',
+                    params: { project, query, maxResults },
+                },
             ),
     );
 
@@ -179,6 +196,10 @@ export function registerFileTools(
                         path,
                         depth,
                     );
+                },
+                {
+                    toolName: 'directory_tree',
+                    params: { project, path, depth },
                 },
             ),
     );
@@ -231,6 +252,10 @@ export function registerFileTools(
                         success: true,
                         path,
                     };
+                },
+                {
+                    toolName: 'write_file',
+                    params: { project, path, content, overwrite },
                 },
             ),
     );
@@ -291,6 +316,16 @@ export function registerFileTools(
                         success: true,
                         path,
                     };
+                },
+                {
+                    toolName: 'replace_text',
+                    params: {
+                        project,
+                        path,
+                        search,
+                        replacement,
+                        expectedOccurrences,
+                    },
                 },
             ),
     );

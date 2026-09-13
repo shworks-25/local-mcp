@@ -14,6 +14,11 @@ import {
     safeResult,
 } from '../result.js';
 
+/**
+ * 注册项目相关 MCP 工具。
+ *
+ * 目的在于向客户端暴露本地项目的发现、列表以及上下文元数据获取能力。
+ */
 export function registerProjectTools(
     server: McpServer,
 ): void {
@@ -32,6 +37,9 @@ export function registerProjectTools(
                     await syncAutoDiscoveredProjects();
 
                     return listProjects();
+                },
+                {
+                    toolName: 'project_list',
                 },
             ),
     );
@@ -56,6 +64,10 @@ export function registerProjectTools(
                     getProjectContext(
                         project,
                     ),
+                {
+                    toolName: 'project_context',
+                    params: { project },
+                },
             ),
     );
 }

@@ -7,7 +7,7 @@ import {
 } from '@modelcontextprotocol/server/stdio';
 
 import {
-    logger,
+    getLogger,
 } from '@shworks/local-core';
 
 import {
@@ -26,46 +26,39 @@ import {
     registerShellTools,
 } from './tools/shell.js';
 
-import {
-    McpServer,
-} from '@modelcontextprotocol/server';
-
-import {
-    serveStdio,
-} from '@modelcontextprotocol/server/stdio';
-
-import {
-    logger,
-} from '@shworks/local-core';
-
-import {
-    registerProjectTools,
-} from './tools/project.js';
-
-import {
-    registerFileTools,
-} from './tools/files.js';
-
-import {
-    registerGitTools,
-} from './tools/git.js';
-
-import {
-    registerShellTools,
-} from './tools/shell.js';
-
+const serverLogger =
+    getLogger('mcp:server');
 
 /**
- * 创建新的 MCP Server。
+ * 安装 STDIO 标准输出防护拦截。
  *
- * 注意：
- * 这里必须每次创建一个新的 McpServer。
+ * 核心目的：
+ * MCP 协议规范严格要求 stdout 作为 JSON-RPC 协议消息的专有通道。
+ * 本防护将 console.log 等无意输出的标准流重定向至 stderr，
+ * 杜绝第三方库或调试代码无意破坏客户端通信协议。
+ */
+function installStdioGuard(): void {
+    const originalLog = console.log;
+    const originalInfo = console.info;
+
+    console.log = (...args: unknown[]) => {
+        console.error('[UNGUARDED_STDOUT_REDIRECT]', ...args);
+    };
+
+    console.info = (...args: unknown[]) => {
+        console.error('[UNGUARDED_STDOUT_REDIRECT]', ...args);
+    };
+
+    void originalLog;
+    void originalInfo;
+}
+
+/**
+ * 创建新的 MCP Server 实例。
  *
- * 原因：
- * - STDIO：每个连接创建一个 Server
- * - HTTP：createMcpHandler 会按请求创建 Server
- *
- * 不要将 McpServer 做成全局单例。
+ * 核心契约：
+ * 每次调用均返回全新的独立 McpServer 实例，满足不同连接或请求的隔离要求，
+ * 避免将 McpServer 作为全局单例使用带来的并发污染。
  */
 export function buildServer(): McpServer {
     const server = new McpServer({
@@ -81,27 +74,21 @@ export function buildServer(): McpServer {
     return server;
 }
 
-
 /**
- * STDIO 模式。
+ * 启动 STDIO 模式的 MCP 服务。
  *
- * 给：
- * - Codex
- * - MCP Inspector STDIO
- * - 其他本地 MCP Client
- *
- * 使用。
+ * 核心目的：
+ * 面向本地接入的 MCP Client（如 Codex、Claude Desktop、MCP Inspector）提供标准输入输出通讯，
+ * 同时预先挂载输出通道安全防护与生命周期就绪日志。
  */
 export function startStdioServer(): void {
+    installStdioGuard();
+
     void serveStdio(
         buildServer,
     );
 
-    /*
-     * Pino 已经配置到 stderr，
-     * 不会污染 MCP stdout。
-     */
-    logger.info(
-        'shworks-devkit MCP server started',
+    serverLogger.info(
+        'shworks-devkit MCP stdio server started',
     );
 }
