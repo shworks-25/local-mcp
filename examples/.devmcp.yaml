@@ -1,0 +1,57 @@
+name: coure
+
+permissions:
+  read: true
+  write: true
+  delete: false
+  shell: restricted
+
+ignore:
+  - .git
+  - node_modules
+  - Pods
+  - DerivedData
+  - build
+  - dist
+  - vendor
+  - .idea
+  - .vscode
+
+protected:
+  - "*.mobileprovision"
+  - "*.cer"
+  - "*.p8"
+
+commands:
+
+  backend-test:
+    program: go
+    args:
+      - test
+      - ./...
+    cwd: server
+    timeoutMs: 120000
+
+  backend-build:
+    program: go
+    args:
+      - build
+      - ./...
+    cwd: server
+    timeoutMs: 120000
+
+  ios-build:
+    program: xcodebuild
+    args:
+      - -scheme
+      - Coure
+      - build
+    cwd: ios
+    timeoutMs: 300000
+
+  android-test:
+    program: ./gradlew
+    args:
+      - test
+    cwd: android
+    timeoutMs: 300000

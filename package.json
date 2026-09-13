@@ -1,0 +1,27 @@
+{
+  "name": "shworks-devkit",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Reusable local development toolkit and MCP server",
+  "engines": {
+    "node": ">=22.12.0"
+  },
+  "scripts": {
+    "build": "pnpm --filter @shworks/local-core build && pnpm --filter @shworks/local-mcp build && pnpm --filter @shworks/local-cli build",
+    "typecheck": "pnpm --filter @shworks/local-core typecheck && pnpm --filter @shworks/local-mcp typecheck && pnpm --filter @shworks/local-cli typecheck",
+    "dev:mcp": "pnpm exec tsx packages/server/src/bin.ts",
+    "dev:cli": "pnpm exec tsx packages/cli/src/index.ts",
+    "clean": "pnpm -r clean",
+
+    "dev:mcp:http": "node --env-file=.env ./node_modules/tsx/dist/cli.mjs packages/server/src/http-bin.ts",
+
+    "mcp:start": "node packages/server/dist/bin.js",
+    "mcp:http": "node --env-file=.env packages/server/dist/http-bin.js"
+  },
+  "devDependencies": {
+    "@types/node": "^22.20.1",
+    "tsx": "^4.23.13",
+    "typescript": "^7.0.2"
+  }
+}

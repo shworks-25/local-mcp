@@ -1,0 +1,17 @@
+node_modules/
+dist/
+*.tsbuildinfo
+
+.DS_Store
+
+.env
+.env.*
+!.env.example
+
+.idea/
+.vscode/
+
+coverage/
+
+pnpm-debug.log*
+npm-debug.log*
