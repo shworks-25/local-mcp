@@ -1,4 +1,5 @@
 import {
+    chmod,
     mkdir,
     readFile,
     writeFile,
@@ -43,7 +44,10 @@ export const PROJECT_REGISTRY_PATH = join(
 export async function ensureConfigDir(): Promise<void> {
     await mkdir(CONFIG_DIR, {
         recursive: true,
+        mode: 0o700,
     });
+
+    await chmod(CONFIG_DIR, 0o700);
 }
 
 async function readYamlFile(
@@ -88,8 +92,13 @@ export async function saveGlobalConfig(
     await writeFile(
         GLOBAL_CONFIG_PATH,
         stringify(parsed),
-        'utf8',
+        {
+            encoding: 'utf8',
+            mode: 0o600,
+        },
     );
+
+    await chmod(GLOBAL_CONFIG_PATH, 0o600);
 }
 
 export async function loadProjectConfig(

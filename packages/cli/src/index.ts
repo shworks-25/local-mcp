@@ -1,6 +1,10 @@
 #!/usr/bin/env node
 
 import {
+    readFileSync,
+} from 'node:fs';
+
+import {
     Command,
 } from 'commander';
 
@@ -17,12 +21,25 @@ import {
 } from './commands/project-list.js';
 
 import {
+    registerProjectTrustCommands,
+} from './commands/project-trust.js';
+
+import {
     registerDoctorCommand,
 } from './commands/doctor.js';
 
 import {
     registerConfigCommand,
 } from './commands/config.js';
+
+const packageVersion = (
+    JSON.parse(
+        readFileSync(
+            new URL('../package.json', import.meta.url),
+            'utf8',
+        ),
+    ) as { version: string }
+).version;
 
 const program =
     new Command();
@@ -32,7 +49,7 @@ program
     .description(
         'Shworks local development toolkit',
     )
-    .version('0.1.0');
+    .version(packageVersion);
 
 registerStartCommand(
     program,
@@ -50,6 +67,10 @@ registerProjectAddCommand(
 );
 
 registerProjectListCommand(
+    projectCommand,
+);
+
+registerProjectTrustCommands(
     projectCommand,
 );
 

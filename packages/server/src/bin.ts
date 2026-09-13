@@ -4,4 +4,4 @@ import {
     startStdioServer,
 } from './server.js';
 
-startStdioServer();
+await startStdioServer();

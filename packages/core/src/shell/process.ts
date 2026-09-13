@@ -3,22 +3,72 @@ import {
 } from 'node:child_process';
 
 /**
- * 敏感环境变量名称匹配模式。
- * 用于在派生子进程前自动剔除高危鉴权密钥与云凭证。
+ * 子进程默认只继承明确允许的基础环境变量。
+ *
+ * 采用 allowlist 而不是凭据名称 denylist，避免遗漏 SSH Agent、云平台、
+ * Kubernetes、Docker 等并不一定包含 token/secret 字样的高权限环境变量。
  */
-const SENSITIVE_ENV_KEY_PATTERN =
-    /token|secret|password|passwd|auth_token|api_?key|private_key/i;
+const SAFE_ENV_KEYS = new Set([
+    // 基础系统与终端环境
+    'PATH',
+    'HOME',
+    'USER',
+    'LOGNAME',
+    'SHELL',
+    'LANG',
+    'TERM',
+    'TMPDIR',
+    'TMP',
+    'TEMP',
+    'CI',
+    'COLORTERM',
+    'FORCE_COLOR',
+
+    // Node.js 与包管理工具链
+    'NODE_ENV',
+    'NVM_DIR',
+    'NVM_BIN',
+    'VOLTA_HOME',
+    'COREPACK_HOME',
+    'PNPM_HOME',
+
+    // Go 语言工具链
+    'GOPATH',
+    'GOROOT',
+    'GOPROXY',
+    'GONOSUMDB',
+    'GOPRIVATE',
+
+    // Rust 与 Cargo 工具链
+    'CARGO_HOME',
+    'RUSTUP_HOME',
+
+    // Python 与 Java 工具链
+    'VIRTUAL_ENV',
+    'JAVA_HOME',
+    'GRADLE_USER_HOME',
+]);
+
+function isSafeEnvKey(key: string): boolean {
+    return (
+        SAFE_ENV_KEYS.has(key) ||
+        key.startsWith('LC_')
+    );
+}
+
+const SENSITIVE_CUSTOM_ENV_KEY_PATTERN =
+    /token|secret|password/i;
+
+function isSafeCustomEnvKey(key: string): boolean {
+    return !SENSITIVE_CUSTOM_ENV_KEY_PATTERN.test(key);
+}
 
 /**
- * 过滤并净化透传给子进程的环境变量。
+ * 构造最小化的子进程环境。
  *
- * 核心目的：
- * 防止宿主环境中存储的高权限云服务凭据、API Token 与私密密码被执行脚本静默读取与外发，
- * 同时完整保留开发者系统工具链依赖的基础环境（如 PATH、HOME、语言编码与开发运行时路径）。
- *
- * @param baseEnv 宿主环境原始变量
- * @param customEnv 调用方显式追加的自定义变量
- * @returns 净化后的安全环境变量集合
+ * @param baseEnv 宿主环境原始变量，仅允许基础 allowlist
+ * @param customEnv 调用方显式追加的自定义变量，仅过滤明显敏感凭据键
+ * @returns 最小化的宿主环境 + 显式任务环境变量集合
  */
 export function buildSafeProcessEnv(
     baseEnv: NodeJS.ProcessEnv = process.env,
@@ -27,19 +77,20 @@ export function buildSafeProcessEnv(
     const safeEnv: NodeJS.ProcessEnv = {};
 
     for (const [key, value] of Object.entries(baseEnv)) {
-        if (value === undefined) {
-            continue;
+        if (
+            value !== undefined &&
+            isSafeEnvKey(key)
+        ) {
+            safeEnv[key] = value;
         }
-
-        if (SENSITIVE_ENV_KEY_PATTERN.test(key)) {
-            continue;
-        }
-
-        safeEnv[key] = value;
     }
 
     if (customEnv) {
-        Object.assign(safeEnv, customEnv);
+        for (const [key, value] of Object.entries(customEnv)) {
+            if (isSafeCustomEnvKey(key)) {
+                safeEnv[key] = value;
+            }
+        }
     }
 
     return safeEnv;

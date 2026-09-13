@@ -36,7 +36,16 @@ export function registerProjectTools(
                 async () => {
                     await syncAutoDiscoveredProjects();
 
-                    return listProjects();
+                    const projects =
+                        await listProjects();
+
+                    return projects.map(
+                        (item) => ({
+                            name: item.name,
+                            addedAt: item.addedAt,
+                            trusted: item.trusted,
+                        }),
+                    );
                 },
                 {
                     toolName: 'project_list',

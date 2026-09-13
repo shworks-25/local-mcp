@@ -18,6 +18,7 @@ import {
 
 import {
     assertNotProtected,
+    assertPermission,
     matchesAnyPattern,
 } from '../security/permissions.js';
 
@@ -26,6 +27,11 @@ export async function directoryTree(
     requestedPath = '.',
     maxDepth = 4,
 ): Promise<string> {
+    assertPermission(
+        project.permissions,
+        'read',
+    );
+
     const root =
         await resolvePathWithinRoot(
             project.root,

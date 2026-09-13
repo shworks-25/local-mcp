@@ -1,4 +1,8 @@
 import {
+    readFileSync,
+} from 'node:fs';
+
+import {
     McpServer,
 } from '@modelcontextprotocol/server';
 
@@ -25,6 +29,15 @@ import {
 import {
     registerShellTools,
 } from './tools/shell.js';
+
+const packageVersion = (
+    JSON.parse(
+        readFileSync(
+            new URL('../package.json', import.meta.url),
+            'utf8',
+        ),
+    ) as { version: string }
+).version;
 
 const serverLogger =
     getLogger('mcp:server');
@@ -63,7 +76,7 @@ function installStdioGuard(): void {
 export function buildServer(): McpServer {
     const server = new McpServer({
         name: 'shworks-devkit',
-        version: '0.1.0',
+        version: packageVersion,
     });
 
     registerProjectTools(server);
@@ -81,10 +94,10 @@ export function buildServer(): McpServer {
  * 面向本地接入的 MCP Client（如 Codex、Claude Desktop、MCP Inspector）提供标准输入输出通讯，
  * 同时预先挂载输出通道安全防护与生命周期就绪日志。
  */
-export function startStdioServer(): void {
+export async function startStdioServer(): Promise<void> {
     installStdioGuard();
 
-    void serveStdio(
+    await serveStdio(
         buildServer,
     );
 

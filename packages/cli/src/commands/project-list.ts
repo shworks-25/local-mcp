@@ -37,7 +37,7 @@ export function registerProjectListCommand(
                     of projects
                     ) {
                     console.log(
-                        `${project.name}\t${project.root}`,
+                        `${project.name}\t${project.root}\t${project.trusted ? 'trusted' : 'untrusted'}`,
                     );
                 }
             },

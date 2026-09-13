@@ -10,6 +10,7 @@
   "scripts": {
     "build": "pnpm --filter @shworks/local-core build && pnpm --filter @shworks/local-mcp build && pnpm --filter @shworks/local-cli build",
     "typecheck": "pnpm --filter @shworks/local-core typecheck && pnpm --filter @shworks/local-mcp typecheck && pnpm --filter @shworks/local-cli typecheck",
+    "test": "tsx --test packages/core/test/*.test.ts packages/server/test/*.test.ts",
     "dev:mcp": "pnpm exec tsx packages/server/src/bin.ts",
     "dev:cli": "pnpm exec tsx packages/cli/src/index.ts",
     "clean": "pnpm -r clean",

@@ -1,5 +1,6 @@
 import {
     readdir,
+    chmod,
     readFile,
     realpath,
     stat,
@@ -34,6 +35,7 @@ export const ProjectRecordSchema =
         name: z.string().min(1),
         root: z.string().min(1),
         addedAt: z.string(),
+        trusted: z.boolean().default(false),
     });
 
 export type ProjectRecord =
@@ -86,7 +88,15 @@ async function saveRegistry(
     await writeFile(
         PROJECT_REGISTRY_PATH,
         stringify(registry),
-        'utf8',
+        {
+            encoding: 'utf8',
+            mode: 0o600,
+        },
+    );
+
+    await chmod(
+        PROJECT_REGISTRY_PATH,
+        0o600,
     );
 }
 
@@ -118,9 +128,34 @@ export async function getProject(
     return project;
 }
 
+export async function setProjectTrust(
+    name: string,
+    trusted: boolean,
+): Promise<ProjectRecord> {
+    const registry =
+        await loadRegistry();
+
+    const project =
+        registry.projects.find(
+            (item) =>
+                item.name === name,
+        );
+
+    if (!project) {
+        throw new Error(
+            `未找到项目：${name}`,
+        );
+    }
+
+    project.trusted = trusted;
+    await saveRegistry(registry);
+    return project;
+}
+
 export async function addProject(
     projectRoot: string,
     requestedName?: string,
+    trusted = false,
 ): Promise<ProjectRecord> {
     const absolute =
         resolve(
@@ -176,6 +211,7 @@ export async function addProject(
         root,
         addedAt:
             new Date().toISOString(),
+        trusted,
     };
 
     registry.projects.push(project);
@@ -244,6 +280,8 @@ export async function syncAutoDiscoveredProjects(): Promise<void> {
             ) {
                 await addProject(
                     candidate,
+                    undefined,
+                    false,
                 );
             }
         }

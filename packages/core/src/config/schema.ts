@@ -42,6 +42,13 @@ export const TaskSchema = z.object({
 
     cwd: z.string().default('.'),
 
+    /**
+     * 任务运行时注入的自定义业务环境变量。
+     */
+    env: z
+        .record(z.string(), z.string())
+        .default({}),
+
     timeoutMs: z
         .number()
         .int()
@@ -87,34 +94,40 @@ export const GlobalConfigSchema = z.object({
     ]),
 
     /**
-     * restricted shell 模式允许执行的程序。
+     * restricted shell 模式允许执行的程序白名单。
+     *
+     * 默认预置常用且标准的主流语言构建与版本控制工具链，
+     * 保证开发者通过 Homebrew 安装后拥有开箱即用的顺畅体验，
+     * 同时将执行范围严格限制在已知合法工具之内。
      */
     allowedPrograms: z.array(z.string()).default([
         'git',
-
         'node',
         'npm',
         'npx',
         'pnpm',
         'yarn',
-
         'go',
-
         'php',
         'composer',
-
         'swift',
         'xcodebuild',
-
         'gradle',
-        './gradlew',
-
         'flutter',
         'dart',
-
         'rg',
         'grep',
     ]),
+
+    /**
+     * restricted 模式下允许从项目目录执行的相对路径脚本。
+     * 与系统程序白名单分离，避免 ./node 等通过 basename 冒充系统工具。
+     */
+    allowedProjectExecutables: z
+        .array(z.string())
+        .default([
+            './gradlew',
+        ]),
 });
 
 export type GlobalConfig = z.infer<typeof GlobalConfigSchema>;

@@ -1,10 +1,16 @@
 import {
+    constants,
+} from 'node:fs';
+
+import {
     mkdir,
-    writeFile,
+    open,
 } from 'node:fs/promises';
 
 import {
+    basename,
     dirname,
+    join,
     relative,
 } from 'node:path';
 
@@ -69,20 +75,45 @@ export async function writeTextFile(
         },
     );
 
-    await writeFile(
-        file,
-        content,
-        {
-            encoding: 'utf8',
+    /*
+     * mkdir 之后再次解析真实父目录，缩短检查与写入之间的竞争窗口。
+     * 最终文件通过 O_NOFOLLOW 打开，拒绝在最后一跳跟随 symlink。
+     */
+    const verifiedParent =
+        await resolvePathWithinRoot(
+            project.root,
+            dirname(file),
+        );
 
-            /*
-             * wx = 文件存在则报错
-             * w  = 覆盖
-             */
-            flag:
-                options.overwrite
-                    ? 'w'
-                    : 'wx',
-        },
-    );
+    const verifiedFile =
+        join(
+            verifiedParent,
+            basename(file),
+        );
+
+    const flags =
+        constants.O_WRONLY |
+        constants.O_CREAT |
+        constants.O_NOFOLLOW |
+        (options.overwrite
+            ? constants.O_TRUNC
+            : constants.O_EXCL);
+
+    const handle =
+        await open(
+            verifiedFile,
+            flags,
+            0o666,
+        );
+
+    try {
+        await handle.writeFile(
+            content,
+            {
+                encoding: 'utf8',
+            },
+        );
+    } finally {
+        await handle.close();
+    }
 }

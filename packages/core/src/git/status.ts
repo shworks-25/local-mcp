@@ -3,6 +3,7 @@ import type {
 } from '../project/resolver.js';
 
 import {
+    assertPermission,
     matchesAnyPattern,
 } from '../security/permissions.js';
 
@@ -13,6 +14,11 @@ import {
 export async function gitStatus(
     project: ResolvedProject,
 ): Promise<string> {
+    assertPermission(
+        project.permissions,
+        'read',
+    );
+
     const result =
         await runGit(
             project,

@@ -20,7 +20,7 @@ export function registerStartCommand(
                  * 注意：
                  * MCP 模式启动之后不能 console.log。
                  */
-                startStdioServer();
+                await startStdioServer();
             },
         );
 }

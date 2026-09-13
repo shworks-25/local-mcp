@@ -18,6 +18,10 @@ import {
     readTextFile,
 } from '../filesystem/read.js';
 
+import {
+    assertPermission,
+} from '../security/permissions.js';
+
 export async function getProjectContext(
     projectName: string,
 ) {
@@ -25,6 +29,11 @@ export async function getProjectContext(
         await resolveProject(
             projectName,
         );
+
+    assertPermission(
+        project.permissions,
+        'read',
+    );
 
     const detection =
         await detectProject(

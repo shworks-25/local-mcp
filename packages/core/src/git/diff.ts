@@ -3,6 +3,7 @@ import type {
 } from '../project/resolver.js';
 
 import {
+    assertPermission,
     matchesAnyPattern,
 } from '../security/permissions.js';
 
@@ -18,6 +19,11 @@ export async function gitDiff(
     project: ResolvedProject,
     options: GitDiffOptions = {},
 ): Promise<string> {
+    assertPermission(
+        project.permissions,
+        'read',
+    );
+
     const baseArgs = [
         'diff',
     ];

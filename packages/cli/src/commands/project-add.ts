@@ -42,6 +42,10 @@ export function registerProjectAddCommand(
                 console.log(
                     `路径：${project.root}`,
                 );
+
+                console.log(
+                    `状态：untrusted（如需执行项目任务，请运行 shdev project trust ${project.name}）`,
+                );
             },
         );
 }
