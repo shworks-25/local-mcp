@@ -65,12 +65,16 @@ export const GlobalConfigSchema = z.object({
     }),
 
     /**
-     * AI 不允许通过文件工具直接读取这些文件。
+     * AI 禁止通过文件工具读取或修改的高危资产与受保护模式。
      *
-     * .devmcp.yaml 也保护起来，
-     * 防止 AI 自己修改自己的权限。
+     * 涵盖版本控制敏感目录、IDE 自动任务配置、私钥证书、环境密钥以及自身权限配置文件，
+     * 避免提示词注入导致的提权或配置篡改。
      */
     protected: z.array(z.string()).default([
+        '.git',
+        '.git/**',
+        '.vscode/**',
+        '.idea/**',
         '.env',
         '.env.*',
         '*.pem',

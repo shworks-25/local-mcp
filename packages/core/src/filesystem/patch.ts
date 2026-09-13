@@ -3,6 +3,10 @@ import type {
 } from '../project/resolver.js';
 
 import {
+    assertNotProtected,
+} from '../security/permissions.js';
+
+import {
     readTextFile,
 } from './read.js';
 
@@ -26,6 +30,14 @@ export async function replaceText(
             'search 不能为空',
         );
     }
+
+    assertNotProtected(
+        path,
+        [
+            ...project.protectedPatterns,
+            ...project.ignorePatterns,
+        ],
+    );
 
     const file =
         await readTextFile(

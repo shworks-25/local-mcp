@@ -124,20 +124,34 @@ export async function searchText(
         );
     }
 
-    const lines =
-        result.stdout
-            .split('\n')
-            .filter(Boolean);
+    const lines: string[] = [];
+    let truncated = false;
+    let startIndex = 0;
+
+    while (startIndex < result.stdout.length) {
+        const nextNewline =
+            result.stdout.indexOf('\n', startIndex);
+        const line =
+            nextNewline === -1
+                ? result.stdout.slice(startIndex)
+                : result.stdout.slice(startIndex, nextNewline);
+
+        if (line.length > 0) {
+            if (lines.length >= maxResults) {
+                truncated = true;
+                break;
+            }
+            lines.push(line);
+        }
+
+        if (nextNewline === -1) {
+            break;
+        }
+        startIndex = nextNewline + 1;
+    }
 
     return {
-        output:
-            lines.slice(
-                0,
-                maxResults,
-            ),
-
-        truncated:
-            lines.length >
-            maxResults,
+        output: lines,
+        truncated,
     };
 }

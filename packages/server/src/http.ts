@@ -315,6 +315,12 @@ export function startHttpServer(
                 },
                 'shworks-devkit Remote MCP started',
             );
+
+            if (!options.authToken) {
+                httpLogger.warn(
+                    'Remote MCP running in test mode without authentication; ensure service is not exposed to untrusted networks',
+                );
+            }
         },
     );
 

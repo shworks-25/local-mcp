@@ -56,7 +56,10 @@ export async function writeTextFile(
 
     assertNotProtected(
         relativePath,
-        project.protectedPatterns,
+        [
+            ...project.protectedPatterns,
+            ...project.ignorePatterns,
+        ],
     );
 
     await mkdir(
