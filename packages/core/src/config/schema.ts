@@ -104,7 +104,6 @@ export const GlobalConfigSchema = z.object({
         'git',
         'node',
         'npm',
-        'npx',
         'pnpm',
         'yarn',
         'go',

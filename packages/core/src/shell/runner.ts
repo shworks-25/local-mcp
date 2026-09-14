@@ -28,6 +28,10 @@ import {
     type ProcessResult,
 } from './process.js';
 
+export type {
+    ProcessResult,
+};
+
 /**
  * 受信任的系统级标准可执行文件目录有序集合。
  * 用于在解析裸命令时提供确定性的安全搜索路径，根除 PATH 劫持隐患。
@@ -96,48 +100,20 @@ async function isExecutable(filePath: string): Promise<boolean> {
  * 核心目的：
  * 绝不依赖未经校验的宿主 PATH 环境变量，防止局部环境或项目目录中的恶意二进制被无意调用。
  */
-async function resolveTrustedExecutable(
+export async function resolveTrustedSystemExecutable(
     program: string,
-    cwd: string,
-    allowedPrograms: string[],
-    allowedProjectExecutables: string[],
 ): Promise<string> {
-    if (program.startsWith('./') || program.startsWith('../')) {
-        if (!allowedProjectExecutables.includes(program)) {
-            throw new Error(
-                `restricted 模式禁止执行未显式授权的项目脚本：${program}`,
-            );
-        }
-
-        const localExecutable = await resolvePathWithinRoot(cwd, program);
-        if (!(await isExecutable(localExecutable))) {
-            throw new Error(`指定的项目内部脚本不可执行：${program}`);
-        }
-        return localExecutable;
-    }
-
     if (isAbsolute(program)) {
-        if (!allowedPrograms.includes(program)) {
-            throw new Error(
-                `restricted 模式禁止执行未显式授权的绝对路径程序：${program}`,
-            );
-        }
         const parent = dirname(program);
         if (!TRUSTED_SYSTEM_BIN_DIRS.includes(parent)) {
             throw new Error(
-                `拒绝执行非系统受信任目录中的绝对路径程序：${program}`,
+                `拒绝执行非固定工具目录中的绝对路径程序：${program}`,
             );
         }
         if (!(await isExecutable(program))) {
             throw new Error(`程序不存在或无执行权限：${program}`);
         }
         return program;
-    }
-
-    if (!allowedPrograms.includes(program)) {
-        throw new Error(
-            `restricted 模式禁止执行程序：${program}`,
-        );
     }
 
     for (const sysDir of TRUSTED_SYSTEM_BIN_DIRS) {
@@ -148,8 +124,40 @@ async function resolveTrustedExecutable(
     }
 
     throw new Error(
-        `无法在系统受信任目录中找到已授权的可执行程序：${program}`,
+        `无法在固定工具目录中找到可执行程序：${program}`,
     );
+}
+
+async function resolveTrustedExecutable(
+    program: string,
+    projectRoot: string,
+    allowedPrograms: string[],
+    allowedProjectExecutables: string[],
+): Promise<string> {
+    if (program.startsWith('./') || program.startsWith('../')) {
+        if (!allowedProjectExecutables.includes(program)) {
+            throw new Error(
+                `restricted 模式禁止执行未显式授权的项目脚本：${program}`,
+            );
+        }
+
+        const localExecutable = await resolvePathWithinRoot(
+            projectRoot,
+            program,
+        );
+        if (!(await isExecutable(localExecutable))) {
+            throw new Error(`指定的项目内部脚本不可执行：${program}`);
+        }
+        return localExecutable;
+    }
+
+    if (!allowedPrograms.includes(program)) {
+        throw new Error(
+            `restricted 模式禁止执行程序：${program}`,
+        );
+    }
+
+    return resolveTrustedSystemExecutable(program);
 }
 
 /**
@@ -230,10 +238,18 @@ async function assertSafeTaskArguments(
     }
 }
 
-export async function runTask(
+export interface TaskExecutionPlan {
+    program: string;
+    args: string[];
+    cwd: string;
+    env: Record<string, string>;
+    timeoutMs: number;
+}
+
+export async function prepareTaskExecution(
     project: ResolvedProject,
     taskName: string,
-): Promise<ProcessResult> {
+): Promise<TaskExecutionPlan> {
     if (project.permissions.shell === 'disabled') {
         throw new Error(
             '当前项目禁止执行命令',
@@ -277,7 +293,7 @@ export async function runTask(
     if (project.permissions.shell === 'restricted') {
         executablePath = await resolveTrustedExecutable(
             task.program,
-            cwd,
+            realProjectRoot,
             project.globalConfig.allowedPrograms,
             project.globalConfig.allowedProjectExecutables,
         );
@@ -294,13 +310,32 @@ export async function runTask(
             ? sanitizeRestrictedTaskEnv(task.env)
             : task.env;
 
+    return {
+        program: executablePath,
+        args: [...task.args],
+        cwd,
+        env: taskEnv,
+        timeoutMs: task.timeoutMs,
+    };
+}
+
+export async function runTask(
+    project: ResolvedProject,
+    taskName: string,
+): Promise<ProcessResult> {
+    const plan =
+        await prepareTaskExecution(
+            project,
+            taskName,
+        );
+
     return runProcess(
-        executablePath,
-        task.args,
+        plan.program,
+        plan.args,
         {
-            cwd,
-            timeoutMs: task.timeoutMs,
-            env: taskEnv,
+            cwd: plan.cwd,
+            timeoutMs: plan.timeoutMs,
+            env: plan.env,
         },
     );
 }

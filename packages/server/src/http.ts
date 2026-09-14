@@ -17,6 +17,7 @@ import {
 } from '@modelcontextprotocol/node';
 
 import {
+    DeveloperRuntime,
     getLogger,
 } from '@shworks/local-core';
 
@@ -27,14 +28,17 @@ import {
 const httpLogger =
     getLogger('mcp:http');
 
-const MAX_REQUEST_BODY_BYTES =
-    4 * 1024 * 1024;
+const DEFAULT_MAX_REQUEST_BODY_BYTES =
+    16 * 1024 * 1024;
 
 const RATE_LIMIT_WINDOW_MS =
     60_000;
 
 const RATE_LIMIT_MAX_REQUESTS =
     120;
+const FAILED_AUTH_RATE_LIMIT_MAX_REQUESTS =
+    30;
+
 
 export interface HttpServerOptions {
     host?: string;
@@ -46,6 +50,18 @@ export interface HttpServerOptions {
      * 仅 loopback 地址允许不配置 Token；任何非本机监听地址都必须认证。
      */
     authToken?: string;
+
+    /**
+     * 显式允许在非 loopback 地址上使用明文 HTTP。
+     * 默认 false；公开网络部署应使用 HTTPS 反向代理。
+     */
+    allowInsecureHttp?: boolean;
+
+    /**
+     * 单次 HTTP 请求体最大字节数上限。
+     * 默认 16MB (16 * 1024 * 1024)。
+     */
+    maxBodyBytes?: number;
 }
 
 function isLoopbackHost(host: string): boolean {
@@ -58,8 +74,70 @@ function isLoopbackHost(host: string): boolean {
     return (
         normalized === 'localhost' ||
         normalized === '::1' ||
-        /^127(?:\.\d{1,3}){3}$/.test(normalized)
+        /^127(?:\.(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)){3}$/.test(normalized)
     );
+}
+
+function extractHostname(
+    value: string,
+): string | undefined {
+    try {
+        return new URL(
+            value.includes('://')
+                ? value
+                : `http://${value}`,
+        ).hostname;
+    } catch {
+        return undefined;
+    }
+}
+
+function validateLoopbackRequestHeaders(
+    req: IncomingMessage,
+    boundHost: string,
+): boolean {
+    if (!isLoopbackHost(boundHost)) {
+        return true;
+    }
+
+    const hostHeader = req.headers.host;
+    if (
+        hostHeader &&
+        !isLoopbackHost(
+            extractHostname(hostHeader) ?? '',
+        )
+    ) {
+        return false;
+    }
+
+    const origin = req.headers.origin;
+    if (
+        origin &&
+        !isLoopbackHost(
+            extractHostname(origin) ?? '',
+        )
+    ) {
+        return false;
+    }
+
+    const referer = req.headers.referer;
+    if (
+        referer &&
+        !isLoopbackHost(
+            extractHostname(referer) ?? '',
+        )
+    ) {
+        return false;
+    }
+
+    const fetchSite =
+        req.headers['sec-fetch-site'];
+
+    if (fetchSite === 'cross-site') {
+        return false;
+    }
+
+    return true;
 }
 
 /**
@@ -142,6 +220,7 @@ function jsonResponse(
     res: ServerResponse,
     statusCode: number,
     data: unknown,
+    onFinish?: () => void,
 ): void {
     const body =
         JSON.stringify(data);
@@ -159,7 +238,124 @@ function jsonResponse(
         Buffer.byteLength(body),
     );
 
-    res.end(body);
+    if (statusCode === 413 || onFinish) {
+        res.setHeader('Connection', 'close');
+    }
+
+    res.end(body, () => {
+        onFinish?.();
+    });
+}
+
+/**
+ * 流式读取请求体并执行字节上限校验。
+ *
+ * 防御未携带 Content-Length 或伪造 Content-Length 的分块传输 (chunked) DoS 攻击。
+ * 若超出上限则立即中断读取并安全关闭底层流。
+ */
+function readRequestBodyWithLimit(
+    req: IncomingMessage,
+    res: ServerResponse,
+    maxBytes: number,
+): Promise<
+    | { ok: true; buffer: Buffer }
+    | { ok: false; status: number; error: string }
+> {
+    return new Promise((resolve) => {
+        if (req.destroyed) {
+            resolve({
+                ok: false,
+                status: 400,
+                error: 'Bad Request: 连接已中断',
+            });
+            return;
+        }
+
+        let totalBytes = 0;
+        const chunks: Buffer[] = [];
+        let completed = false;
+
+        const onData = (chunk: unknown) => {
+            if (completed) {
+                return;
+            }
+
+            const buffer = Buffer.isBuffer(chunk)
+                ? chunk
+                : typeof chunk === 'string'
+                  ? Buffer.from(chunk)
+                  : Buffer.from(chunk as Uint8Array);
+
+            totalBytes += buffer.length;
+
+            if (totalBytes > maxBytes) {
+                completed = true;
+                cleanup();
+                req.pause();
+                const limitMb = (maxBytes / (1024 * 1024)).toFixed(0);
+                resolve({
+                    ok: false,
+                    status: 413,
+                    error: `Payload Too Large: 请求体大小超出 ${limitMb}MB 上限`,
+                });
+            } else {
+                chunks.push(buffer);
+            }
+        };
+
+        const onEnd = () => {
+            if (completed) {
+                return;
+            }
+
+            completed = true;
+            cleanup();
+            resolve({
+                ok: true,
+                buffer: Buffer.concat(chunks),
+            });
+        };
+
+        const onError = () => {
+            if (completed) {
+                return;
+            }
+
+            completed = true;
+            cleanup();
+            resolve({
+                ok: false,
+                status: 400,
+                error: 'Bad Request: 数据流读取失败',
+            });
+        };
+
+        const onClose = () => {
+            if (completed) {
+                return;
+            }
+
+            completed = true;
+            cleanup();
+            resolve({
+                ok: false,
+                status: 499,
+                error: 'Client Closed Request',
+            });
+        };
+
+        const cleanup = () => {
+            req.off('data', onData);
+            req.off('end', onEnd);
+            req.off('error', onError);
+            res.off('close', onClose);
+        };
+
+        req.on('data', onData);
+        req.on('end', onEnd);
+        req.on('error', onError);
+        res.once('close', onClose);
+    });
 }
 
 /**
@@ -176,13 +372,22 @@ export function startHttpServer(
         options.port ??
         8787;
 
-    if (
-        !isLoopbackHost(host) &&
-        !options.authToken
-    ) {
-        throw new Error(
-            `拒绝在非 loopback 地址 ${host} 上启动未认证的 Remote MCP；请配置 authToken`,
-        );
+    const maxBodyBytes =
+        options.maxBodyBytes ??
+        DEFAULT_MAX_REQUEST_BODY_BYTES;
+
+    if (!isLoopbackHost(host)) {
+        if (!options.authToken) {
+            throw new Error(
+                `拒绝在非 loopback 地址 ${host} 上启动未认证的 Remote MCP；请配置 authToken`,
+            );
+        }
+
+        if (!options.allowInsecureHttp) {
+            throw new Error(
+                `拒绝在非 loopback 地址 ${host} 上使用明文 HTTP；请通过 HTTPS 反向代理访问，或显式设置 allowInsecureHttp=true`,
+            );
+        }
     }
 
     /*
@@ -195,9 +400,12 @@ export function startHttpServer(
      * - legacy 2025-era
      * - modern 2026-07-28
      */
+    const runtime =
+        new DeveloperRuntime();
+
     const mcpHandler =
         createMcpHandler(
-            buildServer,
+            () => buildServer(runtime),
         );
 
     /*
@@ -218,19 +426,34 @@ export function startHttpServer(
             }
         >();
 
+    const failedAuthRateLimitState =
+        new Map<
+            string,
+            {
+                count: number;
+                resetAt: number;
+            }
+        >();
+
     /**
      * 定期清理过期的限流状态记录，防止 IP 键在长时间运行下产生内存泄漏。
      */
     const pruneExpiredRateLimits = (
         now: number,
     ): void => {
-        if (rateLimitState.size < 1000) {
-            return;
+        if (rateLimitState.size >= 1000) {
+            for (const [key, entry] of rateLimitState) {
+                if (entry.resetAt <= now) {
+                    rateLimitState.delete(key);
+                }
+            }
         }
 
-        for (const [key, entry] of rateLimitState) {
-            if (entry.resetAt <= now) {
-                rateLimitState.delete(key);
+        if (failedAuthRateLimitState.size >= 1000) {
+            for (const [key, entry] of failedAuthRateLimitState) {
+                if (entry.resetAt <= now) {
+                    failedAuthRateLimitState.delete(key);
+                }
             }
         }
     };
@@ -240,7 +463,7 @@ export function startHttpServer(
     ): boolean => {
         const key =
             req.socket.remoteAddress ??
-            'unknown';
+            'authenticated-principal';
         const now = Date.now();
 
         pruneExpiredRateLimits(now);
@@ -271,9 +494,59 @@ export function startHttpServer(
         );
     };
 
+    const isFailedAuthRateLimited = (
+        req: IncomingMessage,
+    ): boolean => {
+        const key =
+            req.socket.remoteAddress ??
+            'unknown';
+        const now = Date.now();
+
+        pruneExpiredRateLimits(now);
+
+        const existing =
+            failedAuthRateLimitState.get(key);
+
+        if (
+            !existing ||
+            existing.resetAt <= now
+        ) {
+            failedAuthRateLimitState.set(
+                key,
+                {
+                    count: 1,
+                    resetAt:
+                        now +
+                        RATE_LIMIT_WINDOW_MS,
+                },
+            );
+            return false;
+        }
+
+        existing.count += 1;
+        return (
+            existing.count >
+            FAILED_AUTH_RATE_LIMIT_MAX_REQUESTS
+        );
+    };
+
+    let cleanupPromise:
+        | Promise<void>
+        | undefined;
+
+    const cleanupResources = (): Promise<void> => {
+        cleanupPromise ??= (async () => {
+            await mcpHandler.close();
+
+            await runtime.reset();
+        })();
+
+        return cleanupPromise;
+    };
+
     const server =
         createServer(
-            (
+            async (
                 req,
                 res,
             ) => {
@@ -281,35 +554,35 @@ export function startHttpServer(
                     req.headers['content-length'] ?? 0,
                 );
 
-                if (contentLength > MAX_REQUEST_BODY_BYTES) {
+                if (contentLength > maxBodyBytes) {
+                    const limitMb = (maxBodyBytes / (1024 * 1024)).toFixed(0);
                     jsonResponse(
                         res,
                         413,
                         {
                             error:
-                                'Payload Too Large: 请求体大小超出 4MB 上限',
+                                `Payload Too Large: 请求体大小超出 ${limitMb}MB 上限`,
                         },
                     );
                     return;
                 }
 
-                let receivedBytes = 0;
-                req.on('data', (chunk: Buffer) => {
-                    receivedBytes += chunk.length;
-                    if (receivedBytes > MAX_REQUEST_BODY_BYTES) {
-                        req.destroy();
-                        if (!res.headersSent) {
-                            jsonResponse(
-                                res,
-                                413,
-                                {
-                                    error:
-                                        'Payload Too Large: 传输数据超出 4MB 上限',
-                                },
-                            );
-                        }
-                    }
-                });
+                if (
+                    !validateLoopbackRequestHeaders(
+                        req,
+                        host,
+                    )
+                ) {
+                    jsonResponse(
+                        res,
+                        403,
+                        {
+                            error:
+                                'Forbidden Host or Origin',
+                        },
+                    );
+                    return;
+                }
 
                 let url: URL;
 
@@ -374,25 +647,9 @@ export function startHttpServer(
                     return;
                 }
 
-                if (isRateLimited(req)) {
-                    res.setHeader(
-                        'Retry-After',
-                        '60',
-                    );
-
-                    jsonResponse(
-                        res,
-                        429,
-                        {
-                            error:
-                                'Too Many Requests',
-                        },
-                    );
-                    return;
-                }
-
                 /*
                  * MCP endpoint 必须验证。
+                 * 已认证请求在鉴权后进入独立速率限制，避免匿名请求耗尽合法客户端额度。
                  */
                 if (
                     !checkAuthorization(
@@ -400,6 +657,23 @@ export function startHttpServer(
                         options.authToken,
                     )
                 ) {
+                    if (isFailedAuthRateLimited(req)) {
+                        res.setHeader(
+                            'Retry-After',
+                            '60',
+                        );
+
+                        jsonResponse(
+                            res,
+                            429,
+                            {
+                                error:
+                                    'Too Many Unauthorized Requests',
+                            },
+                        );
+                        return;
+                    }
+
                     httpLogger.warn(
                         {
                             ip:
@@ -431,6 +705,63 @@ export function startHttpServer(
                     return;
                 }
 
+                if (isRateLimited(req)) {
+                    res.setHeader(
+                        'Retry-After',
+                        '60',
+                    );
+
+                    jsonResponse(
+                        res,
+                        429,
+                        {
+                            error:
+                                'Too Many Requests',
+                        },
+                    );
+                    return;
+                }
+
+                /*
+                 * 对携带请求体的请求统一执行流式字节上限校验。
+                 * 防御 chunked 传输伪造大小或流穿透攻击。
+                 */
+                if (
+                    req.method !== 'GET' &&
+                    req.method !== 'HEAD'
+                ) {
+                    const bodyResult =
+                        await readRequestBodyWithLimit(
+                            req,
+                            res,
+                            maxBodyBytes,
+                        );
+
+                    if (!bodyResult.ok) {
+                        if (!res.headersSent && !res.destroyed) {
+                            jsonResponse(
+                                res,
+                                bodyResult.status,
+                                {
+                                    error: bodyResult.error,
+                                },
+                                () => {
+                                    req.destroy();
+                                },
+                            );
+                        }
+                        return;
+                    }
+
+                    const bodyBuffer =
+                        bodyResult.buffer;
+
+                    req[Symbol.asyncIterator] =
+                        async function* () {
+                            yield bodyBuffer;
+                        };
+                }
+
                 /*
                  * 真正交给 MCP Handler。
                  */
@@ -452,6 +783,15 @@ export function startHttpServer(
         } else {
             socket.destroy();
         }
+    });
+
+    server.once('close', () => {
+        void cleanupResources().catch((error) => {
+            httpLogger.error(
+                { error },
+                'Failed to clean up HTTP Developer Runtime resources',
+            );
+        });
     });
 
     server.listen(
@@ -502,7 +842,7 @@ export function startHttpServer(
         server.close();
 
         try {
-            await mcpHandler.close();
+            await cleanupResources();
         } catch (
             error
             ) {
@@ -515,23 +855,34 @@ export function startHttpServer(
         }
     }
 
+    const onSigterm = () => {
+        void shutdown('SIGTERM');
+    };
+
+    const onSigint = () => {
+        void shutdown('SIGINT');
+    };
+
     process.once(
         'SIGTERM',
-        () => {
-            void shutdown(
-                'SIGTERM',
-            );
-        },
+        onSigterm,
     );
 
     process.once(
         'SIGINT',
-        () => {
-            void shutdown(
-                'SIGINT',
-            );
-        },
+        onSigint,
     );
+
+    server.once('close', () => {
+        process.removeListener(
+            'SIGTERM',
+            onSigterm,
+        );
+        process.removeListener(
+            'SIGINT',
+            onSigint,
+        );
+    });
 
     return server;
 }

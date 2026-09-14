@@ -5,6 +5,9 @@ import type {
 import {
     runProcess,
 } from '../shell/process.js';
+import {
+    resolveTrustedSystemExecutable,
+} from '../shell/runner.js';
 
 function exclusionGlobs(
     pattern: string,
@@ -97,9 +100,14 @@ export async function searchText(
         '.',
     );
 
+    const rg =
+        await resolveTrustedSystemExecutable(
+            'rg',
+        );
+
     const result =
         await runProcess(
-            'rg',
+            rg,
             args,
             {
                 cwd:

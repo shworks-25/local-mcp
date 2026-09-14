@@ -6,15 +6,30 @@ import {
     runProcess,
     type ProcessResult,
 } from '../shell/process.js';
+import {
+    resolveTrustedSystemExecutable,
+} from '../shell/runner.js';
 
 export async function runGit(
     project: ResolvedProject,
     args: string[],
 ): Promise<ProcessResult> {
+    const git =
+        await resolveTrustedSystemExecutable(
+            'git',
+        );
+
     const result =
         await runProcess(
-            'git',
+            git,
             [
+                '-c',
+                'core.fsmonitor=false',
+                '-c',
+                'diff.external=',
+                '-c',
+                'core.pager=cat',
+                '--no-pager',
                 '-C',
                 project.root,
                 ...args,
@@ -22,6 +37,10 @@ export async function runGit(
             {
                 timeoutMs:
                     30_000,
+                env: {
+                    GIT_TERMINAL_PROMPT: '0',
+                    GIT_ASKPASS: '',
+                },
             },
         );
 

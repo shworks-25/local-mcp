@@ -26,6 +26,8 @@ export async function gitDiff(
 
     const baseArgs = [
         'diff',
+        '--no-ext-diff',
+        '--no-textconv',
     ];
 
     if (options.staged) {

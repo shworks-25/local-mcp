@@ -8,26 +8,40 @@ import type {
     ProjectConfig,
 } from '../config/schema.js';
 
+const SHELL_MODE_RANK = {
+    disabled: 0,
+    restricted: 1,
+    unrestricted: 2,
+} as const;
+
 export function mergePermissions(
     globalConfig: GlobalConfig,
     projectConfig: ProjectConfig,
 ): Permissions {
+    const requestedShell =
+        projectConfig.permissions.shell ??
+        globalConfig.permissions.shell;
+
+    const shell =
+        SHELL_MODE_RANK[requestedShell] <
+        SHELL_MODE_RANK[globalConfig.permissions.shell]
+            ? requestedShell
+            : globalConfig.permissions.shell;
+
     return {
         read:
-            projectConfig.permissions.read ??
-            globalConfig.permissions.read,
+            globalConfig.permissions.read &&
+            (projectConfig.permissions.read ?? true),
 
         write:
-            projectConfig.permissions.write ??
-            globalConfig.permissions.write,
+            globalConfig.permissions.write &&
+            (projectConfig.permissions.write ?? true),
 
         delete:
-            projectConfig.permissions.delete ??
-            globalConfig.permissions.delete,
+            globalConfig.permissions.delete &&
+            (projectConfig.permissions.delete ?? true),
 
-        shell:
-            projectConfig.permissions.shell ??
-            globalConfig.permissions.shell,
+        shell,
     };
 }
 

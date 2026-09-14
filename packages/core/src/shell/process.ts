@@ -1,5 +1,6 @@
 import {
     spawn,
+    type ChildProcess,
 } from 'node:child_process';
 
 /**
@@ -35,9 +36,6 @@ const SAFE_ENV_KEYS = new Set([
     // Go 语言工具链
     'GOPATH',
     'GOROOT',
-    'GOPROXY',
-    'GONOSUMDB',
-    'GOPRIVATE',
 
     // Rust 与 Cargo 工具链
     'CARGO_HOME',
@@ -96,6 +94,25 @@ export function buildSafeProcessEnv(
     return safeEnv;
 }
 
+export function killProcessTree(
+    child: ChildProcess,
+    signal: NodeJS.Signals,
+): void {
+    if (
+        process.platform !== 'win32' &&
+        child.pid
+    ) {
+        try {
+            process.kill(-child.pid, signal);
+            return;
+        } catch {
+            // 进程组可能已经退出，回退到单进程 kill。
+        }
+    }
+
+    child.kill(signal);
+}
+
 export interface ProcessOptions {
     cwd?: string;
 
@@ -148,6 +165,8 @@ export async function runProcess(
                     options.cwd,
                     shell: false,
                     env: safeEnv,
+                    detached:
+                        process.platform !== 'win32',
                     stdio: [
                         'ignore',
                         'pipe',
@@ -156,46 +175,42 @@ export async function runProcess(
                 },
             );
 
-            let stdout = '';
-            let stderr = '';
+            const stdoutChunks: Buffer[] = [];
+            const stderrChunks: Buffer[] = [];
             let timedOut = false;
             let settled = false;
 
-            const append = (
-                current: string,
+            let stdoutBytes = 0;
+            let stderrBytes = 0;
+
+            const appendChunk = (
+                chunks: Buffer[],
                 chunk: Buffer,
-            ): string => {
-                if (
-                    Buffer.byteLength(
-                        current,
-                    ) >= maxOutputBytes
-                ) {
-                    return current;
+                currentBytes: number,
+            ): number => {
+                if (currentBytes >= maxOutputBytes) {
+                    return currentBytes;
                 }
 
                 const remaining =
-                    maxOutputBytes -
-                    Buffer.byteLength(
-                        current,
-                    );
+                    maxOutputBytes - currentBytes;
+                const accepted =
+                    chunk.length <= remaining
+                        ? chunk
+                        : chunk.subarray(0, remaining);
 
-                return (
-                    current +
-                    chunk
-                        .subarray(
-                            0,
-                            remaining,
-                        )
-                        .toString('utf8')
-                );
+                chunks.push(Buffer.from(accepted));
+
+                return currentBytes + accepted.length;
             };
 
             child.stdout.on(
                 'data',
                 (chunk: Buffer) => {
-                    stdout = append(
-                        stdout,
+                    stdoutBytes = appendChunk(
+                        stdoutChunks,
                         chunk,
+                        stdoutBytes,
                     );
                 },
             );
@@ -203,9 +218,10 @@ export async function runProcess(
             child.stderr.on(
                 'data',
                 (chunk: Buffer) => {
-                    stderr = append(
-                        stderr,
+                    stderrBytes = appendChunk(
+                        stderrChunks,
                         chunk,
+                        stderrBytes,
                     );
                 },
             );
@@ -215,9 +231,19 @@ export async function runProcess(
                     () => {
                         timedOut = true;
 
-                        child.kill(
+                        killProcessTree(
+                            child,
                             'SIGTERM',
                         );
+
+                        setTimeout(() => {
+                            if (!settled) {
+                                killProcessTree(
+                                    child,
+                                    'SIGKILL',
+                                );
+                            }
+                        }, 3_000).unref();
                     },
                     timeoutMs,
                 );
@@ -250,8 +276,16 @@ export async function runProcess(
                     resolve({
                         code:
                             code ?? -1,
-                        stdout,
-                        stderr,
+                        stdout:
+                            Buffer.concat(
+                                stdoutChunks,
+                                stdoutBytes,
+                            ).toString('utf8'),
+                        stderr:
+                            Buffer.concat(
+                                stderrChunks,
+                                stderrBytes,
+                            ).toString('utf8'),
                         timedOut,
                     });
                 },

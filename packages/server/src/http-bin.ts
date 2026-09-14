@@ -17,6 +17,9 @@ const port =
 const authToken =
     process.env.MCP_AUTH_TOKEN;
 
+const allowInsecureHttp =
+    process.env.MCP_ALLOW_INSECURE_HTTP === '1';
+
 if (
     process.env.NODE_ENV ===
     'production' &&
@@ -29,8 +32,20 @@ if (
     process.exit(1);
 }
 
+const maxBodyBytesEnv =
+    process.env.MCP_MAX_BODY_BYTES;
+
+const maxBodyBytes =
+    maxBodyBytesEnv &&
+    !Number.isNaN(Number(maxBodyBytesEnv)) &&
+    Number(maxBodyBytesEnv) > 0
+        ? Number(maxBodyBytesEnv)
+        : undefined;
+
 startHttpServer({
     host,
     port,
     authToken,
+    allowInsecureHttp,
+    maxBodyBytes,
 });

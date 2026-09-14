@@ -25,3 +25,11 @@ export * from './git/branch.js';
 
 export * from './shell/process.js';
 export * from './shell/runner.js';
+
+export * from './package/scripts.js';
+export * from './quality/checks.js';
+export * from './code/symbols.js';
+export * from './dev/server-manager.js';
+export * from './workspace/snapshot.js';
+export * from './security/scan.js';
+export * from './runtime/developer-runtime.js';

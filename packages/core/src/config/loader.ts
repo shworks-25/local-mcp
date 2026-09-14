@@ -1,5 +1,6 @@
 import {
     chmod,
+    lstat,
     mkdir,
     readFile,
     writeFile,
@@ -108,6 +109,20 @@ export async function loadProjectConfig(
         projectRoot,
         '.devmcp.yaml',
     );
+
+    try {
+        const info = await lstat(file);
+        if (info.isSymbolicLink()) {
+            throw new Error(
+                '.devmcp.yaml 不允许使用符号链接',
+            );
+        }
+    } catch (error) {
+        const nodeError = error as NodeJS.ErrnoException;
+        if (nodeError.code !== 'ENOENT') {
+            throw error;
+        }
+    }
 
     const raw = await readYamlFile(file);
 

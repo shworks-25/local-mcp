@@ -11,6 +11,7 @@ import {
 } from '@modelcontextprotocol/server/stdio';
 
 import {
+    DeveloperRuntime,
     getLogger,
 } from '@shworks/local-core';
 
@@ -29,6 +30,10 @@ import {
 import {
     registerShellTools,
 } from './tools/shell.js';
+
+import {
+    registerDeveloperTools,
+} from './tools/developer.js';
 
 const packageVersion = (
     JSON.parse(
@@ -73,7 +78,9 @@ function installStdioGuard(): void {
  * 每次调用均返回全新的独立 McpServer 实例，满足不同连接或请求的隔离要求，
  * 避免将 McpServer 作为全局单例使用带来的并发污染。
  */
-export function buildServer(): McpServer {
+export function buildServer(
+    runtime = new DeveloperRuntime(),
+): McpServer {
     const server = new McpServer({
         name: 'shworks-devkit',
         version: packageVersion,
@@ -83,6 +90,10 @@ export function buildServer(): McpServer {
     registerFileTools(server);
     registerGitTools(server);
     registerShellTools(server);
+    registerDeveloperTools(
+        server,
+        runtime,
+    );
 
     return server;
 }
@@ -97,11 +108,17 @@ export function buildServer(): McpServer {
 export async function startStdioServer(): Promise<void> {
     installStdioGuard();
 
-    await serveStdio(
-        buildServer,
-    );
+    const runtime = new DeveloperRuntime();
 
-    serverLogger.info(
-        'shworks-devkit MCP stdio server started',
-    );
+    try {
+        await serveStdio(
+            () => buildServer(runtime),
+        );
+
+        serverLogger.info(
+            'shworks-devkit MCP stdio server started',
+        );
+    } finally {
+        await runtime.reset();
+    }
 }
