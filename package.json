@@ -4,6 +4,7 @@
   "private": true,
   "type": "module",
   "description": "Reusable local development toolkit and MCP server",
+  "license": "Apache-2.0",
   "engines": {
     "node": ">=22.12.0"
   },

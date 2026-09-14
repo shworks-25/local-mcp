@@ -66,6 +66,8 @@ export async function getProjectContext(
         | string
         | undefined;
 
+    let agentsMdPresent = false;
+
     try {
         const agents =
             await readTextFile(
@@ -74,8 +76,12 @@ export async function getProjectContext(
                 100_000,
             );
 
-        agentsMd =
-            agents.content;
+        agentsMdPresent = true;
+
+        if (project.record.trusted) {
+            agentsMd =
+                agents.content;
+        }
     } catch {
         // AGENTS.md 是可选文件。
     }
@@ -83,9 +89,6 @@ export async function getProjectContext(
     return {
         name:
         project.record.name,
-
-        root:
-        project.root,
 
         technologies:
         detection.technologies,
@@ -106,6 +109,7 @@ export async function getProjectContext(
                 project.config.commands,
             ),
 
+        agentsMdPresent,
         agentsMd,
     };
 }

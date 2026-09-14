@@ -28,14 +28,19 @@ const MAX_ACTIVE_PROCESSES = 4;
 const MAX_ACTIVE_PROCESSES_PER_PROJECT = 2;
 const MAX_PROCESS_RECORDS = 100;
 
+interface LogBuffer {
+    chunks: Buffer[];
+    bytes: number;
+}
+
 interface DevProcessRecord {
     id: string;
     project: string;
     task: string;
     child: ChildProcess;
     startedAt: string;
-    stdout: string;
-    stderr: string;
+    stdout: LogBuffer;
+    stderr: LogBuffer;
     exitCode?: number;
 }
 
@@ -76,18 +81,52 @@ function ensureRuntimeCleanup(
     );
 }
 
-function appendLog(
-    current: string,
-    chunk: Buffer,
-): string {
-    const text = chunk.toString('utf8');
-    const combined = current + text;
+function createLogBuffer(): LogBuffer {
+    return {
+        chunks: [],
+        bytes: 0,
+    };
+}
 
-    if (combined.length <= MAX_LOG_BYTES) {
-        return combined;
+function appendLog(
+    log: LogBuffer,
+    chunk: Buffer,
+): void {
+    if (chunk.length === 0) {
+        return;
     }
 
-    return combined.slice(-MAX_LOG_BYTES);
+    log.chunks.push(Buffer.from(chunk));
+    log.bytes += chunk.length;
+
+    while (
+        log.bytes > MAX_LOG_BYTES &&
+        log.chunks.length > 0
+    ) {
+        const overflow =
+            log.bytes - MAX_LOG_BYTES;
+        const first = log.chunks[0]!;
+
+        if (first.length <= overflow) {
+            log.chunks.shift();
+            log.bytes -= first.length;
+            continue;
+        }
+
+        log.chunks[0] = Buffer.from(
+            first.subarray(overflow),
+        );
+        log.bytes -= overflow;
+    }
+}
+
+function logBufferToString(
+    log: LogBuffer,
+): string {
+    return Buffer.concat(
+        log.chunks,
+        log.bytes,
+    ).toString('utf8');
 }
 
 function pruneProcessRecords(
@@ -194,18 +233,18 @@ export async function devStart(
         task,
         child,
         startedAt,
-        stdout: '',
-        stderr: '',
+        stdout: createLogBuffer(),
+        stderr: createLogBuffer(),
     };
 
     processes.set(id, record);
 
     child.stdout?.on('data', (chunk: Buffer) => {
-        record.stdout = appendLog(record.stdout, chunk);
+        appendLog(record.stdout, chunk);
     });
 
     child.stderr?.on('data', (chunk: Buffer) => {
-        record.stderr = appendLog(record.stderr, chunk);
+        appendLog(record.stderr, chunk);
     });
 
     child.on('close', (code) => {
@@ -213,7 +252,7 @@ export async function devStart(
     });
 
     child.on('error', (error) => {
-        record.stderr = appendLog(
+        appendLog(
             record.stderr,
             Buffer.from(`\n${error.message}\n`),
         );
@@ -274,8 +313,12 @@ export function devLogs(
     return {
         id,
         running: record.exitCode === undefined,
-        stdout: record.stdout.slice(-maxChars),
-        stderr: record.stderr.slice(-maxChars),
+        stdout:
+            logBufferToString(record.stdout)
+                .slice(-maxChars),
+        stderr:
+            logBufferToString(record.stderr)
+                .slice(-maxChars),
         exitCode: record.exitCode,
     };
 }

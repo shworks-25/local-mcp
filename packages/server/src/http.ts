@@ -31,6 +31,8 @@ const httpLogger =
 const DEFAULT_MAX_REQUEST_BODY_BYTES =
     16 * 1024 * 1024;
 
+const MAX_RATE_LIMIT_KEYS = 1_024;
+
 const RATE_LIMIT_WINDOW_MS =
     60_000;
 
@@ -248,10 +250,10 @@ function jsonResponse(
 }
 
 /**
- * 流式读取请求体并执行字节上限校验。
+ * 流式读取请求体并执行实时字节上限熔断。
  *
- * 防御未携带 Content-Length 或伪造 Content-Length 的分块传输 (chunked) DoS 攻击。
- * 若超出上限则立即中断读取并安全关闭底层流。
+ * 目的在于防御未携带 Content-Length 或伪造长度的 chunked 分块 DoS 穿透攻击。
+ * 当累积字节超过设定上限时立即终止读取并主动销毁底层连接。
  */
 function readRequestBodyWithLimit(
     req: IncomingMessage,
@@ -436,26 +438,49 @@ export function startHttpServer(
         >();
 
     /**
-     * 定期清理过期的限流状态记录，防止 IP 键在长时间运行下产生内存泄漏。
+     * 清理过期限流记录并执行硬容量上限。
+     * Map 使用插入顺序，容量满时淘汰最旧记录，避免短时间大量来源导致内存无界增长。
      */
-    const pruneExpiredRateLimits = (
+    const pruneRateLimitMap = (
+        state: Map<
+            string,
+            {
+                count: number;
+                resetAt: number;
+            }
+        >,
         now: number,
     ): void => {
-        if (rateLimitState.size >= 1000) {
-            for (const [key, entry] of rateLimitState) {
-                if (entry.resetAt <= now) {
-                    rateLimitState.delete(key);
-                }
+        for (const [key, entry] of state) {
+            if (entry.resetAt <= now) {
+                state.delete(key);
             }
         }
 
-        if (failedAuthRateLimitState.size >= 1000) {
-            for (const [key, entry] of failedAuthRateLimitState) {
-                if (entry.resetAt <= now) {
-                    failedAuthRateLimitState.delete(key);
-                }
+        while (state.size >= MAX_RATE_LIMIT_KEYS) {
+            const oldestKey = state.keys().next().value as
+                | string
+                | undefined;
+
+            if (!oldestKey) {
+                break;
             }
+
+            state.delete(oldestKey);
         }
+    };
+
+    const pruneExpiredRateLimits = (
+        now: number,
+    ): void => {
+        pruneRateLimitMap(
+            rateLimitState,
+            now,
+        );
+        pruneRateLimitMap(
+            failedAuthRateLimitState,
+            now,
+        );
     };
 
     const isRateLimited = (
@@ -723,8 +748,8 @@ export function startHttpServer(
                 }
 
                 /*
-                 * 对携带请求体的请求统一执行流式字节上限校验。
-                 * 防御 chunked 传输伪造大小或流穿透攻击。
+                 * 对携带请求体的请求统一执行流式字节上限校验与熔断。
+                 * 杜绝 chunked 传输伪造大小或慢速流 DoS 穿透。
                  */
                 if (
                     req.method !== 'GET' &&

@@ -1,10 +1,6 @@
 import {
     access,
 } from 'node:fs/promises';
-import {
-    join,
-} from 'node:path';
-
 import type {
     ResolvedProject,
 } from '../project/resolver.js';
@@ -19,6 +15,9 @@ import {
     runTask,
     type ProcessResult,
 } from '../shell/runner.js';
+import {
+    resolvePathWithinRoot,
+} from '../security/path-guard.js';
 
 export interface DiagnosticItem {
     line: string;
@@ -81,8 +80,15 @@ function diagnosticsFrom(
     return lines.map((line) => ({ line }));
 }
 
-async function exists(path: string): Promise<boolean> {
+async function existsWithinRoot(
+    project: ResolvedProject,
+    relativePath: string,
+): Promise<boolean> {
     try {
+        const path = await resolvePathWithinRoot(
+            project.root,
+            relativePath,
+        );
         await access(path);
         return true;
     } catch {
@@ -120,7 +126,7 @@ async function runLanguageDefault(
     project: ResolvedProject,
     kind: 'test' | 'typecheck' | 'lint',
 ): Promise<ProcessResult | undefined> {
-    if (await exists(join(project.root, 'go.mod'))) {
+    if (await existsWithinRoot(project, 'go.mod')) {
         if (kind === 'lint') {
             return runSyntheticTask(
                 project,
@@ -137,7 +143,7 @@ async function runLanguageDefault(
         );
     }
 
-    if (await exists(join(project.root, 'Package.swift'))) {
+    if (await existsWithinRoot(project, 'Package.swift')) {
         if (kind === 'lint') {
             return undefined;
         }
@@ -149,7 +155,7 @@ async function runLanguageDefault(
         );
     }
 
-    if (await exists(join(project.root, 'pubspec.yaml'))) {
+    if (await existsWithinRoot(project, 'pubspec.yaml')) {
         return runSyntheticTask(
             project,
             `__quality_flutter_${kind}__`,
@@ -161,8 +167,8 @@ async function runLanguageDefault(
     }
 
     if (
-        await exists(join(project.root, 'gradlew')) ||
-        await exists(join(project.root, 'gradlew.bat'))
+        await existsWithinRoot(project, 'gradlew') ||
+        await existsWithinRoot(project, 'gradlew.bat')
     ) {
         if (kind === 'lint') {
             return runSyntheticTask(

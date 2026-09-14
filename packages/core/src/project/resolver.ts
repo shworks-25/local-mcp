@@ -53,6 +53,22 @@ export async function resolveProject(
         ...projectConfig.protected,
     ];
 
+    const mergedPermissions =
+        mergePermissions(
+            globalConfig,
+            projectConfig,
+        );
+
+    const effectivePermissions =
+        record.trusted
+            ? mergedPermissions
+            : {
+                  ...mergedPermissions,
+                  write: false,
+                  delete: false,
+                  shell: 'disabled' as const,
+              };
+
     return {
         record,
 
@@ -63,10 +79,7 @@ export async function resolveProject(
         config: projectConfig,
 
         permissions:
-            mergePermissions(
-                globalConfig,
-                projectConfig,
-            ),
+            effectivePermissions,
 
         protectedPatterns: [
             ...new Set(

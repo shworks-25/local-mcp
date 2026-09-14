@@ -293,6 +293,12 @@ export async function workspaceRestore(
     preservedNewFiles: string[];
     snapshotId: string;
 }> {
+    if (!project.record.trusted) {
+        throw new Error(
+            '未受信任项目为只读模式，禁止恢复快照',
+        );
+    }
+
     assertPermission(project.permissions, 'write');
 
     const snapshot = getProjectSnapshot(

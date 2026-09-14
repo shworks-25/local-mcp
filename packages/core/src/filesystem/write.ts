@@ -37,6 +37,12 @@ export async function writeTextFile(
     content: string,
     options: WriteFileOptions = {},
 ): Promise<void> {
+    if (!project.record.trusted) {
+        throw new Error(
+            '未受信任项目为只读模式，禁止写入文件',
+        );
+    }
+
     assertPermission(
         project.permissions,
         'write',

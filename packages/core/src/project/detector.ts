@@ -5,6 +5,10 @@ import {
 } from 'node:fs/promises';
 
 import {
+    resolvePathWithinRoot,
+} from '../security/path-guard.js';
+
+import {
     join,
     relative,
 } from 'node:path';
@@ -19,11 +23,17 @@ export interface ProjectDetection {
     frameworks: DetectedItem[];
 }
 
-async function exists(
+async function existsWithinRoot(
+    root: string,
     file: string,
 ): Promise<boolean> {
     try {
-        await access(file);
+        const relativePath = relative(root, file);
+        const resolved = await resolvePathWithinRoot(
+            root,
+            relativePath,
+        );
+        await access(resolved);
         return true;
     } catch {
         return false;
@@ -31,11 +41,17 @@ async function exists(
 }
 
 async function readTextSafe(
+    root: string,
     file: string,
 ): Promise<string> {
     try {
+        const relativePath = relative(root, file);
+        const resolved = await resolvePathWithinRoot(
+            root,
+            relativePath,
+        );
         return await readFile(
-            file,
+            resolved,
             'utf8',
         );
     } catch {
@@ -72,7 +88,8 @@ export async function looksLikeProject(
 
     for (const marker of markers) {
         if (
-            await exists(
+            await existsWithinRoot(
+                root,
                 join(
                     root,
                     marker,
@@ -190,7 +207,7 @@ export async function detectProject(
                 'package.json',
             );
 
-        if (await exists(packageJson)) {
+        if (await existsWithinRoot(root, packageJson)) {
             addTechnology(
                 'Node.js',
                 location,
@@ -199,9 +216,9 @@ export async function detectProject(
             try {
                 const parsed =
                     JSON.parse(
-                        await readFile(
+                        await readTextSafe(
+                            root,
                             packageJson,
-                            'utf8',
                         ),
                     ) as {
                         dependencies?: Record<
@@ -252,7 +269,7 @@ export async function detectProject(
                 'go.mod',
             );
 
-        if (await exists(goMod)) {
+        if (await existsWithinRoot(root, goMod)) {
             addTechnology(
                 'Go',
                 location,
@@ -260,6 +277,7 @@ export async function detectProject(
 
             const content =
                 await readTextSafe(
+                    root,
                     goMod,
                 );
 
@@ -292,7 +310,7 @@ export async function detectProject(
                 'composer.json',
             );
 
-        if (await exists(composer)) {
+        if (await existsWithinRoot(root, composer)) {
             addTechnology(
                 'PHP',
                 location,
@@ -300,6 +318,7 @@ export async function detectProject(
 
             const content =
                 await readTextSafe(
+                    root,
                     composer,
                 );
 
@@ -316,7 +335,8 @@ export async function detectProject(
         }
 
         if (
-            await exists(
+            await existsWithinRoot(
+                root,
                 join(
                     location,
                     'Package.swift',
@@ -335,13 +355,15 @@ export async function detectProject(
         }
 
         if (
-            await exists(
+            await existsWithinRoot(
+                root,
                 join(
                     location,
                     'build.gradle.kts',
                 ),
             ) ||
-            await exists(
+            await existsWithinRoot(
+                root,
                 join(
                     location,
                     'settings.gradle.kts',
@@ -360,7 +382,8 @@ export async function detectProject(
         }
 
         if (
-            await exists(
+            await existsWithinRoot(
+                root,
                 join(
                     location,
                     'pubspec.yaml',

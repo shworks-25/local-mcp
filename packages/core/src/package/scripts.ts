@@ -1,10 +1,6 @@
 import {
     access,
 } from 'node:fs/promises';
-import {
-    join,
-} from 'node:path';
-
 import type {
     ResolvedProject,
 } from '../project/resolver.js';
@@ -15,14 +11,24 @@ import {
     runTask,
     type ProcessResult,
 } from '../shell/runner.js';
+import {
+    resolvePathWithinRoot,
+} from '../security/path-guard.js';
 
 export interface PackageScriptsResult {
     manager: 'pnpm' | 'yarn' | 'npm';
     scripts: Record<string, string>;
 }
 
-async function exists(path: string): Promise<boolean> {
+async function existsWithinRoot(
+    project: ResolvedProject,
+    relativePath: string,
+): Promise<boolean> {
     try {
+        const path = await resolvePathWithinRoot(
+            project.root,
+            relativePath,
+        );
         await access(path);
         return true;
     } catch {
@@ -33,10 +39,20 @@ async function exists(path: string): Promise<boolean> {
 async function detectPackageManager(
     project: ResolvedProject,
 ): Promise<'pnpm' | 'yarn' | 'npm'> {
-    if (await exists(join(project.root, 'pnpm-lock.yaml'))) {
+    if (
+        await existsWithinRoot(
+            project,
+            'pnpm-lock.yaml',
+        )
+    ) {
         return 'pnpm';
     }
-    if (await exists(join(project.root, 'yarn.lock'))) {
+    if (
+        await existsWithinRoot(
+            project,
+            'yarn.lock',
+        )
+    ) {
         return 'yarn';
     }
     return 'npm';
