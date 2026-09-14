@@ -236,6 +236,7 @@ Endpoint: http://127.0.0.1:8787/mcp
 | `MCP_AUTH_TOKEN` | *(空)* | Bearer Token 访问密钥（非回环地址强制要求） |
 | `MCP_ALLOW_INSECURE_HTTP` | `0` | 是否显式允许在非回环地址上使用明文 HTTP |
 | `MCP_MAX_BODY_BYTES` | `16777216` (16MB) | 单次请求体最大字节限制（支持流式 chunked 熔断） |
+| `MCP_ALLOWED_HOSTS` | *(空)* | 受信任的域名白名单，多个以英文逗号分隔（解决网关反代 Host 校验） |
 
 启动范例：
 

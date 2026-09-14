@@ -64,6 +64,12 @@ export interface HttpServerOptions {
      * 默认 16MB (16 * 1024 * 1024)。
      */
     maxBodyBytes?: number;
+
+    /**
+     * 允许访问的受信任主机域名白名单（例如通过公网网关反向代理访问时）。
+     * 针对在本地 loopback 监听模式下安全放行特定外部域名访问。
+     */
+    allowedHosts?: string[];
 }
 
 function isLoopbackHost(host: string): boolean {
@@ -78,6 +84,22 @@ function isLoopbackHost(host: string): boolean {
         normalized === '::1' ||
         /^127(?:\.(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)){3}$/.test(normalized)
     );
+}
+
+function isTrustedHost(
+    hostCandidate: string,
+    allowedHosts?: Set<string>,
+): boolean {
+    const normalized = hostCandidate.trim().toLowerCase();
+    if (isLoopbackHost(normalized)) {
+        return true;
+    }
+
+    if (allowedHosts && allowedHosts.has(normalized)) {
+        return true;
+    }
+
+    return false;
 }
 
 function extractHostname(
@@ -97,6 +119,7 @@ function extractHostname(
 function validateLoopbackRequestHeaders(
     req: IncomingMessage,
     boundHost: string,
+    allowedHosts?: Set<string>,
 ): boolean {
     if (!isLoopbackHost(boundHost)) {
         return true;
@@ -105,8 +128,9 @@ function validateLoopbackRequestHeaders(
     const hostHeader = req.headers.host;
     if (
         hostHeader &&
-        !isLoopbackHost(
+        !isTrustedHost(
             extractHostname(hostHeader) ?? '',
+            allowedHosts,
         )
     ) {
         return false;
@@ -115,8 +139,9 @@ function validateLoopbackRequestHeaders(
     const origin = req.headers.origin;
     if (
         origin &&
-        !isLoopbackHost(
+        !isTrustedHost(
             extractHostname(origin) ?? '',
+            allowedHosts,
         )
     ) {
         return false;
@@ -125,8 +150,9 @@ function validateLoopbackRequestHeaders(
     const referer = req.headers.referer;
     if (
         referer &&
-        !isLoopbackHost(
+        !isTrustedHost(
             extractHostname(referer) ?? '',
+            allowedHosts,
         )
     ) {
         return false;
@@ -136,7 +162,19 @@ function validateLoopbackRequestHeaders(
         req.headers['sec-fetch-site'];
 
     if (fetchSite === 'cross-site') {
-        return false;
+        const originOrReferer =
+            origin ?? referer;
+        const candidateHost = originOrReferer
+            ? extractHostname(originOrReferer) ?? ''
+            : '';
+
+        if (
+            !candidateHost ||
+            !allowedHosts ||
+            !allowedHosts.has(candidateHost.toLowerCase())
+        ) {
+            return false;
+        }
     }
 
     return true;
@@ -569,6 +607,12 @@ export function startHttpServer(
         return cleanupPromise;
     };
 
+    const allowedHostsSet = new Set(
+        (options.allowedHosts ?? []).map((item) =>
+            item.trim().toLowerCase(),
+        ),
+    );
+
     const server =
         createServer(
             async (
@@ -596,6 +640,7 @@ export function startHttpServer(
                     !validateLoopbackRequestHeaders(
                         req,
                         host,
+                        allowedHostsSet,
                     )
                 ) {
                     jsonResponse(

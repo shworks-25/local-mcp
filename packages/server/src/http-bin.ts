@@ -42,10 +42,22 @@ const maxBodyBytes =
         ? Number(maxBodyBytesEnv)
         : undefined;
 
+const allowedHostsEnv =
+    process.env.MCP_ALLOWED_HOSTS;
+
+const allowedHosts =
+    allowedHostsEnv
+        ? allowedHostsEnv
+              .split(',')
+              .map((item) => item.trim())
+              .filter((item) => item.length > 0)
+        : undefined;
+
 startHttpServer({
     host,
     port,
     authToken,
     allowInsecureHttp,
     maxBodyBytes,
+    allowedHosts,
 });
