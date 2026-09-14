@@ -66,10 +66,11 @@ export interface HttpServerOptions {
     maxBodyBytes?: number;
 
     /**
-     * 允许访问的受信任主机域名白名单（例如通过公网网关反向代理访问时）。
-     * 针对在本地 loopback 监听模式下安全放行特定外部域名访问。
+     * 允许访问的受信任 Host 白名单（例如通过公网网关反向代理访问时）。
+     * 这里只控制 HTTP Host header，不同时充当浏览器 Origin 白名单。
      */
     allowedHosts?: string[];
+
 }
 
 function isLoopbackHost(host: string): boolean {
@@ -120,6 +121,7 @@ function validateLoopbackRequestHeaders(
     req: IncomingMessage,
     boundHost: string,
     allowedHosts?: Set<string>,
+    enforceBrowserSourceChecks = true,
 ): boolean {
     if (!isLoopbackHost(boundHost)) {
         return true;
@@ -136,12 +138,15 @@ function validateLoopbackRequestHeaders(
         return false;
     }
 
+    if (!enforceBrowserSourceChecks) {
+        return true;
+    }
+
     const origin = req.headers.origin;
     if (
         origin &&
-        !isTrustedHost(
+        !isLoopbackHost(
             extractHostname(origin) ?? '',
-            allowedHosts,
         )
     ) {
         return false;
@@ -150,9 +155,8 @@ function validateLoopbackRequestHeaders(
     const referer = req.headers.referer;
     if (
         referer &&
-        !isTrustedHost(
+        !isLoopbackHost(
             extractHostname(referer) ?? '',
-            allowedHosts,
         )
     ) {
         return false;
@@ -162,19 +166,7 @@ function validateLoopbackRequestHeaders(
         req.headers['sec-fetch-site'];
 
     if (fetchSite === 'cross-site') {
-        const originOrReferer =
-            origin ?? referer;
-        const candidateHost = originOrReferer
-            ? extractHostname(originOrReferer) ?? ''
-            : '';
-
-        if (
-            !candidateHost ||
-            !allowedHosts ||
-            !allowedHosts.has(candidateHost.toLowerCase())
-        ) {
-            return false;
-        }
+        return false;
     }
 
     return true;
@@ -251,6 +243,155 @@ function checkAuthorization(
         token,
         authToken,
     );
+}
+
+/**
+ * 构造用于对外自省的 OpenAPI 3.1.0 规范对象。
+ * 方便 ChatGPT Custom Actions、Swagger UI 及外部智能体网关一键导入服务定义。
+ */
+function generateOpenApiSchema(
+    req: IncomingMessage,
+): Record<string, unknown> {
+    const hostHeader =
+        req.headers.host ?? 'localhost';
+    const forwardedProto =
+        req.headers['x-forwarded-proto'];
+    const proto =
+        forwardedProto === 'https' ||
+        !isLoopbackHost(
+            extractHostname(hostHeader) ?? '',
+        )
+            ? 'https'
+            : 'http';
+    const serverUrl = `${proto}://${hostHeader}`;
+
+    return {
+        openapi: '3.1.0',
+        info: {
+            title: 'SHWorks DevKit MCP Gateway',
+            description:
+                'API to invoke local tools and services via MCP protocol.',
+            version: '1.0.0',
+        },
+        servers: [
+            {
+                url: serverUrl,
+            },
+        ],
+        paths: {
+            '/mcp': {
+                post: {
+                    summary:
+                        'Send JSON-RPC Command to MCP Server',
+                    operationId:
+                        'invokeMcpAction',
+                    parameters: [
+                        {
+                            name: 'Accept',
+                            in: 'header',
+                            required: true,
+                            schema: {
+                                type: 'string',
+                                default:
+                                    'application/json, text/event-stream',
+                            },
+                        },
+                    ],
+                    requestBody: {
+                        required: true,
+                        content: {
+                            'application/json': {
+                                schema: {
+                                    $ref: '#/components/schemas/McpRequest',
+                                },
+                            },
+                        },
+                    },
+                    responses: {
+                        '200': {
+                            description:
+                                'Successful MCP Response',
+                            content: {
+                                'application/json': {
+                                    schema: {
+                                        $ref: '#/components/schemas/McpResponse',
+                                    },
+                                },
+                            },
+                        },
+                    },
+                },
+            },
+        },
+        components: {
+            schemas: {
+                McpRequest: {
+                    type: 'object',
+                    properties: {
+                        jsonrpc: {
+                            type: 'string',
+                            example: '2.0',
+                        },
+                        id: {
+                            type: 'integer',
+                            example: 1,
+                        },
+                        method: {
+                            type: 'string',
+                            description:
+                                'MCP method name',
+                            example:
+                                'tools/call',
+                        },
+                        params: {
+                            type: 'object',
+                            description:
+                                'Parameters for the MCP method',
+                        },
+                    },
+                    required: [
+                        'jsonrpc',
+                        'id',
+                        'method',
+                    ],
+                },
+                McpResponse: {
+                    type: 'object',
+                    properties: {
+                        jsonrpc: {
+                            type: 'string',
+                            example: '2.0',
+                        },
+                        id: {
+                            type: 'integer',
+                            example: 1,
+                        },
+                        result: {
+                            type: 'object',
+                        },
+                        error: {
+                            type: 'object',
+                        },
+                    },
+                    required: [
+                        'jsonrpc',
+                        'id',
+                    ],
+                },
+            },
+            securitySchemes: {
+                bearerAuth: {
+                    type: 'http',
+                    scheme: 'bearer',
+                },
+            },
+        },
+        security: [
+            {
+                bearerAuth: [],
+            },
+        ],
+    };
 }
 
 /**
@@ -641,6 +782,7 @@ export function startHttpServer(
                         req,
                         host,
                         allowedHostsSet,
+                        !options.authToken,
                     )
                 ) {
                     jsonResponse(
@@ -674,15 +816,65 @@ export function startHttpServer(
                     return;
                 }
 
+                const normalizedPath =
+                    url.pathname.replace(/\/+$/, '') || '/';
+
                 /*
-                 * 健康检查不需要 Token。
-                 *
-                 * 只返回程序运行状态，
-                 * 不返回任何项目信息。
+                 * 机器可读的服务元信息自省与预检路由，供外部客户端与反向代理自动发现。
                  */
+                if (req.method === 'OPTIONS') {
+                    if (
+                        normalizedPath === '/openapi.json' ||
+                        normalizedPath.startsWith('/.well-known/')
+                    ) {
+                        res.setHeader(
+                            'Access-Control-Allow-Origin',
+                            '*',
+                        );
+                        res.setHeader(
+                            'Access-Control-Allow-Methods',
+                            'GET, OPTIONS',
+                        );
+                        res.setHeader(
+                            'Access-Control-Allow-Headers',
+                            'Content-Type, Authorization',
+                        );
+                        res.statusCode = 204;
+                        res.end();
+                        return;
+                    }
+                }
+
                 if (
                     req.method === 'GET' &&
-                    url.pathname === '/healthz'
+                    normalizedPath === '/'
+                ) {
+                    res.setHeader(
+                        'Access-Control-Allow-Origin',
+                        '*',
+                    );
+                    jsonResponse(
+                        res,
+                        200,
+                        {
+                            service:
+                                'shworks-devkit',
+                            status: 'running',
+                            mcpEndpoint:
+                                '/mcp',
+                            openapi:
+                                '/openapi.json',
+                            health:
+                                '/healthz',
+                        },
+                    );
+
+                    return;
+                }
+
+                if (
+                    req.method === 'GET' &&
+                    normalizedPath === '/healthz'
                 ) {
                     jsonResponse(
                         res,
@@ -699,11 +891,62 @@ export function startHttpServer(
                     return;
                 }
 
+                if (
+                    req.method === 'GET' &&
+                    normalizedPath ===
+                        '/.well-known/mcp.json'
+                ) {
+                    res.setHeader(
+                        'Access-Control-Allow-Origin',
+                        '*',
+                    );
+                    jsonResponse(
+                        res,
+                        200,
+                        {
+                            name: 'shworks-devkit',
+                            description:
+                                'Local development toolkit and Model Context Protocol (MCP) gateway',
+                            version: '0.1.0',
+                            transport: {
+                                type: 'streamable-http',
+                                endpoint:
+                                    '/mcp',
+                            },
+                            authentication: {
+                                type: 'bearer',
+                            },
+                        },
+                    );
+
+                    return;
+                }
+
+                if (
+                    req.method === 'GET' &&
+                    (normalizedPath ===
+                        '/openapi.json' ||
+                        normalizedPath ===
+                            '/.well-known/openapi.json')
+                ) {
+                    res.setHeader(
+                        'Access-Control-Allow-Origin',
+                        '*',
+                    );
+                    jsonResponse(
+                        res,
+                        200,
+                        generateOpenApiSchema(req),
+                    );
+
+                    return;
+                }
+
                 /*
-                 * 只开放 /mcp。
+                 * 仅开放 /mcp 进行 JSON-RPC 协议调用。
                  */
                 if (
-                    url.pathname !== '/mcp'
+                    normalizedPath !== '/mcp'
                 ) {
                     jsonResponse(
                         res,

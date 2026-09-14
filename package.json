@@ -5,6 +5,16 @@
   "type": "module",
   "description": "Reusable local development toolkit and MCP server",
   "license": "Apache-2.0",
+  "keywords": [
+    "mcp",
+    "mcp-server",
+    "model-context-protocol",
+    "chatgpt-actions",
+    "claude-desktop",
+    "cursor",
+    "agentic-ai",
+    "developer-tools"
+  ],
   "engines": {
     "node": ">=22.12.0"
   },

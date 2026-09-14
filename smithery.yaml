@@ -1,0 +1,13 @@
+# Smithery configuration for SHWorks DevKit MCP Server
+# Enables discovery, indexing, and one-click installation on Smithery.ai
+
+startCommand:
+  type: stdio
+  configSchema:
+    type: object
+    properties: {}
+  commandFunction: |-
+    (config) => ({
+      command: 'node',
+      args: ['packages/server/dist/bin.js']
+    })

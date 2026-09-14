@@ -4,10 +4,17 @@
   "type": "module",
   "description": "CLI for shworks-devkit",
   "license": "Apache-2.0",
+  "keywords": [
+    "mcp",
+    "mcp-server",
+    "model-context-protocol",
+    "cli",
+    "developer-tools"
+  ],
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "bin": {
-    "shmcp": "./dist/index.js"
+    "shcli": "./dist/index.js"
   },
   "files": [
     "dist"

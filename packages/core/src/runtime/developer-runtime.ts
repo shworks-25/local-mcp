@@ -103,9 +103,9 @@ export class DeveloperRuntime {
         return {
             scope: 'developer-runtime',
             isolation:
-                'stdio connection or authenticated HTTP principal runtime',
+                'one runtime per stdio connection or HTTP server authentication principal',
             authenticationBoundary:
-                'Bearer token principal (or local loopback principal without auth)',
+                'Clients sharing the same HTTP server and Bearer token share one Developer Runtime; local loopback without auth shares the server runtime',
             stateful: [
                 'test result cache',
                 'dev process manager',

@@ -49,7 +49,7 @@ const program =
     new Command();
 
 program
-    .name('shmcp')
+    .name('shcli')
     .description(
         'Shworks local developer runtime and MCP server',
     )
@@ -87,7 +87,7 @@ registerConfigCommand(
 );
 
 /*
- * 当用户直接执行 shmcp 不带任何子命令时，
+ * 当用户直接执行 shcli 不带任何子命令时，
  * 默认直接启动本地 MCP stdio 服务（供 Claude Desktop / Cursor 直连）。
  * 带有参数或子命令时，交由 Commander 进行严格参数解析与未知命令校验。
  */
@@ -101,7 +101,7 @@ if (process.argv.length <= 2) {
                 : String(error);
 
         process.stderr.write(
-            `[shmcp] 启动 MCP stdio 服务失败: ${message}\n`,
+            `[shcli] 启动 MCP stdio 服务失败: ${message}\n`,
         );
         process.exit(1);
     }

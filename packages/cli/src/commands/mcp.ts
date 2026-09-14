@@ -33,7 +33,7 @@ export function registerMcpCommand(
                             : String(error);
 
                     process.stderr.write(
-                        `[shmcp] 启动 MCP stdio 服务失败: ${message}\n`,
+                        `[shcli] 启动 MCP stdio 服务失败: ${message}\n`,
                     );
                     process.exit(1);
                 }

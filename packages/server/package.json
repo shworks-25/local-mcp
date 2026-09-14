@@ -2,6 +2,17 @@
   "name": "@shworks/local-mcp",
   "version": "0.1.0",
   "license": "Apache-2.0",
+  "description": "Model Context Protocol (MCP) server & gateway for SHWorks DevKit",
+  "keywords": [
+    "mcp",
+    "mcp-server",
+    "model-context-protocol",
+    "chatgpt-actions",
+    "claude",
+    "cursor",
+    "sse",
+    "json-rpc"
+  ],
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",

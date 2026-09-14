@@ -200,6 +200,7 @@ async function assertSafeTaskArguments(
     program: string,
     args: string[],
     projectRoot: string,
+    taskCwd: string,
 ): Promise<void> {
     const base = basename(program);
     const forbiddenFlags = FORBIDDEN_INLINE_EVAL_FLAGS[base];
@@ -233,7 +234,18 @@ async function assertSafeTaskArguments(
 
         const scriptArg = args.find((arg) => !arg.startsWith('-'));
         if (scriptArg) {
-            await resolvePathWithinRoot(projectRoot, scriptArg);
+            const scriptCandidate = isAbsolute(scriptArg)
+                ? scriptArg
+                : join(taskCwd, scriptArg);
+            const relativeScript = relative(
+                projectRoot,
+                scriptCandidate,
+            );
+
+            await resolvePathWithinRoot(
+                projectRoot,
+                relativeScript,
+            );
         }
     }
 }
@@ -301,7 +313,8 @@ export async function prepareTaskExecution(
         await assertSafeTaskArguments(
             task.program,
             task.args,
-            project.root,
+            realProjectRoot,
+            cwd,
         );
     }
 

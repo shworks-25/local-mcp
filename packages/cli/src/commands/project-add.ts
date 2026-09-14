@@ -44,7 +44,7 @@ export function registerProjectAddCommand(
                 );
 
                 console.log(
-                    `状态：untrusted（如需执行项目任务，请运行 shmcp project trust ${project.name}）`,
+                    `状态：untrusted（如需执行项目任务，请运行 shcli project trust ${project.name}）`,
                 );
             },
         );

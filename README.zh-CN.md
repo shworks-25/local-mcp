@@ -109,13 +109,13 @@ flowchart TD
 必须在本地终端通过 CLI 显式授予信任：
 
 ```bash
-shmcp project trust <工程名>
+shcli project trust <工程名>
 ```
 
 亦可随时撤销信任：
 
 ```bash
-shmcp project untrust <工程名>
+shcli project untrust <工程名>
 ```
 
 ### 受限执行模式并非 OS 级沙箱
@@ -178,23 +178,27 @@ pnpm clean
 
 ## CLI 命令行工具与 MCP 服务
 
-完成编译或全局安装后，核心统一命令为：
+工程管理 CLI 为：
 
 ```bash
-shmcp
+shcli
 ```
-
-直接运行 `shmcp` 将默认启动本地 MCP stdio 服务。
 
 工程管理常用指令一览：
 
 ```bash
-shmcp project add <路径>      # 注册新工程
-shmcp project list           # 列出所有已注册工程
-shmcp project trust <工程名>   # 授予工程受信任状态
-shmcp project untrust <工程名> # 撤销工程信任
-shmcp doctor                 # 检测本地开发环境依赖与健康状态
-shmcp config                 # 查看当前全局配置
+shcli project add <路径>      # 注册新工程
+shcli project list           # 列出所有已注册工程
+shcli project trust <工程名>   # 授予工程受信任状态
+shcli project untrust <工程名> # 撤销工程信任
+shcli doctor                 # 检测本地开发环境依赖与健康状态
+shcli config                 # 查看当前全局配置
+```
+
+独立的 stdio MCP 服务端可执行程序仍为：
+
+```bash
+shmcp
 ```
 
 ## MCP stdio 服务端
@@ -209,6 +213,14 @@ shmcp
 
 ```bash
 pnpm dev:mcp
+```
+
+### 通过 Smithery 一键安装
+
+支持通过 [Smithery](https://smithery.ai) 自动为 Claude Desktop 或 Cursor 进行一键安装：
+
+```bash
+npx -y @smithery/cli install @shworks/local-mcp --client claude
 ```
 
 ## MCP HTTP 服务端
@@ -236,7 +248,7 @@ Endpoint: http://127.0.0.1:8787/mcp
 | `MCP_AUTH_TOKEN` | *(空)* | Bearer Token 访问密钥（非回环地址强制要求） |
 | `MCP_ALLOW_INSECURE_HTTP` | `0` | 是否显式允许在非回环地址上使用明文 HTTP |
 | `MCP_MAX_BODY_BYTES` | `16777216` (16MB) | 单次请求体最大字节限制（支持流式 chunked 熔断） |
-| `MCP_ALLOWED_HOSTS` | *(空)* | 受信任的域名白名单，多个以英文逗号分隔（解决网关反代 Host 校验） |
+| `MCP_ALLOWED_HOSTS` | *(空)* | 受信任的 Host 白名单，多个以英文逗号分隔，仅用于 Host header / 反向代理校验 |
 
 启动范例：
 
@@ -288,7 +300,7 @@ ngrok http 8787
      > “你是一个专业的全栈本地协同开发专家，请优先通过已连接的本地 MCP 工具自省代码、修改文件并运行测试验证结果。”
 3. 滚动到页面底部，找到 **Actions（操作）**，点击 **Create new action**（创建新操作）：
    - **Authentication（身份验证）**：选择 **API Key**，Auth Type 选 **Bearer**，填入第 1 步中设置的 `MCP_AUTH_TOKEN`。
-   - **Schema / Server URL**：填入第 2 步中获得的 HTTPS 隧道地址，即 `https://your-tunnel.trycloudflare.com/mcp`。
+   - **Schema（规范定义）**：点击 **Import from URL（从 URL 导入）** 并填入：`https://your-tunnel.trycloudflare.com/openapi.json`（ChatGPT 将全自动解析接口与入参结构）。
 4. 点击右上角 **Create / Update** 按钮，发布范围选择 **Only me（仅自己可见）** 保存。
 5. **开始无限协同编程**：
    - 在 ChatGPT 网页端左侧边栏，随时点击进入刚才创建的专属 GPT。
@@ -388,6 +400,24 @@ pnpm build
 ## 安全漏洞响应
 
 若您在本项目中发现安全隐患或漏洞，请避免直接在公共 Issue 中公开可利用细节。请通过仓库配置的私密安全报告渠道（GitHub Private Vulnerability Reporting）联系维护团队。
+
+## 服务自省与自动发现 (Machine Introspection)
+
+HTTP 服务端内置标准机器可读的自省与发现端点，方便 AI 客户端、反向代理网关及开发者平台自动感知服务能力：
+
+| 端点 | 方法 | 作用与用途 | 鉴权要求 |
+| :--- | :--- | :--- | :--- |
+| `/` | `GET` | 服务运行状态概览与端点导航目录 | 公开免鉴权 |
+| `/healthz` | `GET` | 容器健康检查探针 | 公开免鉴权 |
+| `/openapi.json` | `GET` | OpenAPI 3.1.0 规范定义（供 ChatGPT Custom Actions 从 URL 一键导入） | 公开免鉴权 |
+| `/.well-known/openapi.json` | `GET` | RFC 规范的 OpenAPI 发现端点 | 公开免鉴权 |
+| `/.well-known/mcp.json` | `GET` | MCP 协议元信息与传输协议定义 | 公开免鉴权 |
+| `/mcp` | `POST` | MCP 标准 JSON-RPC 2.0 协议交互入口 | 必须 Bearer Token |
+
+### GitHub 仓库标签 (Topics) 推荐配置
+
+发布至 GitHub 仓库时，建议在仓库右上角配置以下标准 Topics，以便外部 MCP 搜索引擎（Smithery、PulseMCP、Glama 等）自动收录：
+`mcp`, `mcp-server`, `model-context-protocol`, `chatgpt-actions`, `claude-desktop`, `cursor`, `developer-tools`
 
 ## 开源许可
 

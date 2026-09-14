@@ -109,13 +109,13 @@ An untrusted project is treated as read-only:
 Trust must be granted locally through the CLI:
 
 ```bash
-shmcp project trust <name>
+shcli project trust <name>
 ```
 
 Trust can be revoked with:
 
 ```bash
-shmcp project untrust <name>
+shcli project untrust <name>
 ```
 
 ### Restricted execution is not a sandbox
@@ -178,23 +178,27 @@ pnpm clean
 
 ## CLI & MCP Server
 
-After building or installing the package, the primary CLI and MCP executable is:
+The management CLI is:
 
 ```bash
-shmcp
+shcli
 ```
-
-Running `shmcp` without arguments directly starts the local MCP stdio server.
 
 Useful management commands include:
 
 ```bash
-shmcp project add <path>
-shmcp project list
-shmcp project trust <name>
-shmcp project untrust <name>
-shmcp doctor
-shmcp config
+shcli project add <path>
+shcli project list
+shcli project trust <name>
+shcli project untrust <name>
+shcli doctor
+shcli config
+```
+
+The standalone stdio MCP server executable remains:
+
+```bash
+shmcp
 ```
 
 ## MCP stdio server
@@ -209,6 +213,14 @@ For local development:
 
 ```bash
 pnpm dev:mcp
+```
+
+### Installation via Smithery (One-Click)
+
+To install for Claude Desktop or Cursor automatically via [Smithery](https://smithery.ai):
+
+```bash
+npx -y @smithery/cli install @shworks/local-mcp --client claude
 ```
 
 ## MCP HTTP server
@@ -236,6 +248,8 @@ MCP_ALLOW_INSECURE_HTTP
 MCP_MAX_BODY_BYTES
 MCP_ALLOWED_HOSTS
 ```
+
+`MCP_ALLOWED_HOSTS` is only for trusted HTTP Host values (for example, a reverse-proxy hostname). Authenticated MCP requests do not depend on browser `Origin` / `Referer` headers. Browser-source checks are enforced only for unauthenticated loopback mode.
 
 Example:
 
@@ -291,7 +305,7 @@ You will receive a public HTTPS URL such as `https://your-tunnel.trycloudflare.c
      > "You are an expert full-stack local coding assistant. Always use the connected local MCP tools to inspect code, edit files, and execute tests before answering."
 3. Scroll down to the bottom, find **Actions**, and click **Create new action**:
    - **Authentication**: Select **API Key**, Auth Type **Bearer**, and enter the `MCP_AUTH_TOKEN` from Step 1.
-   - **Schema / Server URL**: Enter the HTTPS tunnel endpoint from Step 2: `https://your-tunnel.trycloudflare.com/mcp`.
+   - **Schema**: Click **Import from URL** and enter `https://your-tunnel.trycloudflare.com/openapi.json` (ChatGPT will automatically import the OpenAPI 3.1.0 schema).
 4. In the top-right corner, click **Create / Update** and choose **Only me** to save.
 5. **Start Unlimited Pairing**:
    - In the ChatGPT Web sidebar, click on your newly created custom GPT at any time.
@@ -392,6 +406,24 @@ A release should use an immutable Git tag and source archive with a verified SHA
 ## Reporting security issues
 
 Please avoid publishing exploitable security issues in a public issue before a fix is available. If a private security reporting channel is configured for the repository, use that channel first.
+
+## Discovery & Machine Introspection
+
+The HTTP server provides standard machine-readable discovery endpoints so AI clients, reverse proxies, and developer portals can discover server capabilities automatically:
+
+| Endpoint | Method | Purpose | Authentication |
+| :--- | :--- | :--- | :--- |
+| `/` | `GET` | Service landing status and endpoint directory | Public |
+| `/healthz` | `GET` | Health check probe | Public |
+| `/openapi.json` | `GET` | OpenAPI 3.1.0 specification (for ChatGPT Custom Actions 1-click import) | Public |
+| `/.well-known/openapi.json` | `GET` | RFC-style well-known OpenAPI specification endpoint | Public |
+| `/.well-known/mcp.json` | `GET` | MCP protocol metadata and transport configuration | Public |
+| `/mcp` | `POST` | JSON-RPC 2.0 protocol endpoint | Bearer Token |
+
+### GitHub Topics for Discovery
+
+When hosting on GitHub, add these repository topics to ensure automated crawlers (Smithery, PulseMCP, Glama) index your server:
+`mcp`, `mcp-server`, `model-context-protocol`, `chatgpt-actions`, `claude-desktop`, `cursor`, `developer-tools`
 
 ## License
 
