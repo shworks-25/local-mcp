@@ -1,5 +1,7 @@
 # local-mcp
 
+[English](./README.md) | [简体中文](./README.zh-CN.md)
+
 A secure local developer runtime and Model Context Protocol (MCP) server for AI-assisted coding on macOS and other Unix-like development environments.
 
 `local-mcp` gives AI clients structured access to local projects without exposing an unrestricted shell. It combines project trust, filesystem confinement, safe Git reads, controlled task execution, Developer Runtime state, workspace snapshots, and stdio/HTTP MCP transports.
@@ -25,6 +27,58 @@ This project is currently in early development (`0.1.0`). The security model is 
 - MCP over stdio and HTTP
 - Loopback Host/Origin/Referer/Fetch-Metadata checks for local HTTP mode
 - Request body, rate-limit, process-output and runtime resource limits
+
+---
+
+## 💡 Killer Feature: Seamless ChatGPT Web Integration (Unlimited Coding Without 5-Hour Caps)
+
+When using **ChatGPT Web** for deep coding assistance, developers commonly face two bottlenecks:
+1. **Usage limits**: Cloud-based Advanced Data Analysis (Code Interpreter) burns through strict **5-hour rate limits**, causing popup lockouts that disrupt workflow.
+2. **Environment isolation**: Cloud sandboxes cannot directly read, write, or run tests on your local machine, forcing frustrating manual copy-pasting.
+
+### How Does `local-mcp` Enable Unlimited Coding?
+
+`local-mcp` connects ChatGPT Web to your local projects using a **"Cloud Reasoning Brain + Local Execution Engine"** architecture:
+
+```mermaid
+flowchart TD
+    subgraph Cloud["☁️ Cloud Brain (OpenAI Cloud)"]
+        User(["👤 Developer"]):::userNode -->|"Prompt / Coding Task"| WebUI["💻 ChatGPT Web<br/><b>Standard chat stream · Zero cloud sandbox quota consumed</b>"]:::cloudNode
+        WebUI -->|"Intent parsing & Standard MCP tool calls"| Tunnel["🔒 Secure HTTPS Tunnel<br/><b>Cloudflare Tunnel / ngrok / Proxy</b>"]:::tunnelNode
+    end
+
+    subgraph Local["🖥️ Local Execution Engine (Your Machine)"]
+        Tunnel -->|"Remote MCP (HTTP / SSE)"| Server["⚡ Local shmcp-http Server<br/><b>Bearer Token Auth + 16MB Streaming Fuse</b>"]:::serverNode
+
+        Server -->|"Code Introspection"| TaskRead["🔍 Workspace search & AST symbol navigation"]:::localAction
+        Server -->|"Precision Modification"| TaskWrite["📝 Safe filesystem write & exact patch"]:::localAction
+        Server -->|"Local Build & Verification"| TaskTest["🧪 Run pnpm test / typecheck / lint"]:::localAction
+        Server -->|"Process Lifecycle"| TaskDev["🚀 Supervise Dev Server & live logs"]:::localAction
+
+        TaskRead --> Sandbox["🛡️ Multi-Layer Security Guard<br/><b>Path traversal defense · Credential shield · Read-only for untrusted</b>"]:::sandboxNode
+        TaskWrite --> Sandbox
+        TaskTest --> Sandbox
+        TaskDev --> Sandbox
+
+        Sandbox -->|"Real execution stdout & error stack traces"| Server
+    end
+
+    Server -->|"Stream JSON-RPC results"| WebUI
+    WebUI -->|"Autonomous closed-loop self-correction"| User
+
+    classDef cloudNode fill:#e8f4fd,stroke:#10a37f,stroke-width:2px,color:#111;
+    classDef tunnelNode fill:#fff8e1,stroke:#ffa000,stroke-width:2px,color:#111;
+    classDef serverNode fill:#f3e5f5,stroke:#8e24aa,stroke-width:2px,color:#111;
+    classDef localAction fill:#e8f5e9,stroke:#388e3c,stroke-width:1.5px,color:#111;
+    classDef sandboxNode fill:#ffebee,stroke:#d32f2f,stroke-width:2px,stroke-dasharray: 4 4,color:#111;
+    classDef userNode fill:#f5f5f5,stroke:#616161,stroke-width:2px,color:#111;
+```
+
+- **Zero Cloud Sandbox Consumption**: All file indexing, precise syntax patching, type checking, test runs, and dev server supervision occur **directly on your local computer**. It does not consume OpenAI's cloud container resources.
+- **Continuous All-Day Workflow**: To ChatGPT Web, this operates through standard text/tool conversation streams, **completely bypassing the strict 5-hour code execution limits** so you can refactor, write features, and debug without interruption.
+- **Instant WYSIWYG Feedback**: ChatGPT modifies code locally and runs test suites immediately, inspecting error stack traces and self-correcting autonomously without manual intervention.
+
+---
 
 ## Security model
 
@@ -55,13 +109,13 @@ An untrusted project is treated as read-only:
 Trust must be granted locally through the CLI:
 
 ```bash
-shdev project trust <name>
+shmcp project trust <name>
 ```
 
 Trust can be revoked with:
 
 ```bash
-shdev project untrust <name>
+shmcp project untrust <name>
 ```
 
 ### Restricted execution is not a sandbox
@@ -122,35 +176,36 @@ Clean generated output:
 pnpm clean
 ```
 
-## CLI
+## CLI & MCP Server
 
-After building or installing the package, the primary CLI is:
+After building or installing the package, the primary CLI and MCP executable is:
 
 ```bash
-shdev
+shmcp
 ```
 
-Useful commands include:
+Running `shmcp` without arguments directly starts the local MCP stdio server.
+
+Useful management commands include:
 
 ```bash
-shdev project add <path>
-shdev project list
-shdev project trust <name>
-shdev project untrust <name>
-shdev doctor
-shdev config
-shdev start
+shmcp project add <path>
+shmcp project list
+shmcp project trust <name>
+shmcp project untrust <name>
+shmcp doctor
+shmcp config
 ```
 
 ## MCP stdio server
 
-The stdio MCP executable is:
+Connect AI clients (Claude Desktop, Cursor, etc.) directly using:
 
 ```bash
-shdev-mcp
+shmcp
 ```
 
-For development:
+For local development:
 
 ```bash
 pnpm dev:mcp
@@ -161,7 +216,7 @@ pnpm dev:mcp
 The HTTP executable is:
 
 ```bash
-shdev-mcp-http
+shmcp-http
 ```
 
 Default configuration:
@@ -187,7 +242,7 @@ Example:
 MCP_AUTH_TOKEN="replace-with-a-strong-token" \
 MCP_HOST="127.0.0.1" \
 MCP_PORT="8787" \
-shdev-mcp-http
+shmcp-http
 ```
 
 Non-loopback HTTP requires authentication. Plain HTTP on a non-loopback address is rejected by default and must be explicitly enabled with:
@@ -197,6 +252,54 @@ MCP_ALLOW_INSECURE_HTTP=1
 ```
 
 For remote access, prefer an HTTPS reverse proxy instead of exposing plaintext HTTP.
+
+### Connecting with ChatGPT Web (3 Steps to Unlimited Coding)
+
+Connecting your local workspace to ChatGPT Web takes only three simple steps:
+
+#### Step 1: Start `shmcp-http` with a Secure Auth Token
+
+```bash
+MCP_AUTH_TOKEN="set-your-strong-random-token" \
+MCP_HOST="127.0.0.1" \
+MCP_PORT="8787" \
+shmcp-http
+```
+
+#### Step 2: Expose via Secure HTTPS Tunnel (Cloudflare Tunnel or ngrok)
+
+Since ChatGPT Web runs in the cloud, expose your local port via a secure tunnel:
+
+```bash
+# Using Cloudflare Tunnel (cloudflared):
+cloudflared tunnel --url http://127.0.0.1:8787
+
+# Or using ngrok:
+ngrok http 8787
+```
+You will receive a public HTTPS URL such as `https://your-tunnel.trycloudflare.com`.
+
+#### Step 3: Create a Dedicated Assistant via GPTs Editor (Official Method for Plus / Team)
+
+> 💡 **Important Note**: In ChatGPT Plus Web, global MCP tools cannot be attached directly in generic chat windows. The official, stable way supported by OpenAI is creating a dedicated assistant via **My GPTs**:
+
+1. Open the official GPT Editor in your browser: [https://chatgpt.com/gpts/editor](https://chatgpt.com/gpts/editor).
+2. Switch to the **Configure** tab:
+   - **Name**: Enter `Local Dev Assistant` (or your preferred name).
+   - **Instructions**: Add a concise prompt, e.g.:
+     > "You are an expert full-stack local coding assistant. Always use the connected local MCP tools to inspect code, edit files, and execute tests before answering."
+3. Scroll down to the bottom, find **Actions**, and click **Create new action**:
+   - **Authentication**: Select **API Key**, Auth Type **Bearer**, and enter the `MCP_AUTH_TOKEN` from Step 1.
+   - **Schema / Server URL**: Enter the HTTPS tunnel endpoint from Step 2: `https://your-tunnel.trycloudflare.com/mcp`.
+4. In the top-right corner, click **Create / Update** and choose **Only me** to save.
+5. **Start Unlimited Pairing**:
+   - In the ChatGPT Web sidebar, click on your newly created custom GPT at any time.
+   - Pair-program naturally in the browser chat:
+     > *"Inspect our project README, find uncovered edge cases in packages/core, apply fixes, and run pnpm test to verify!"*
+
+All reasoning flows through standard chat, while code execution and test verification run on your local machine **without burning through strict 5-hour Code Interpreter quotas**!
+
+---
 
 ## Project configuration
 
@@ -270,9 +373,9 @@ runtime_capabilities
 runtime_reset
 ```
 
-## Homebrew
+## Installation & Release Gate
 
-A Homebrew formula/tap is planned. Until an official formula is published, build the project from source using pnpm.
+Currently, build the project from source or link globally using pnpm.
 
 Before creating a release, the intended release gate is:
 

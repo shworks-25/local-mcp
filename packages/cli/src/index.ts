@@ -9,8 +9,12 @@ import {
 } from 'commander';
 
 import {
-    registerStartCommand,
-} from './commands/start.js';
+    registerMcpCommand,
+} from './commands/mcp.js';
+
+import {
+    startStdioServer,
+} from '@shworks/local-mcp';
 
 import {
     registerProjectAddCommand,
@@ -45,13 +49,13 @@ const program =
     new Command();
 
 program
-    .name('shdev')
+    .name('shmcp')
     .description(
-        'Shworks local development toolkit',
+        'Shworks local developer runtime and MCP server',
     )
     .version(packageVersion);
 
-registerStartCommand(
+registerMcpCommand(
     program,
 );
 
@@ -82,6 +86,27 @@ registerConfigCommand(
     program,
 );
 
-await program.parseAsync(
-    process.argv,
-);
+/*
+ * 当用户直接执行 shmcp 不带任何子命令时，
+ * 默认直接启动本地 MCP stdio 服务（供 Claude Desktop / Cursor 直连）。
+ * 带有参数或子命令时，交由 Commander 进行严格参数解析与未知命令校验。
+ */
+if (process.argv.length <= 2) {
+    try {
+        await startStdioServer();
+    } catch (error) {
+        const message =
+            error instanceof Error
+                ? error.message
+                : String(error);
+
+        process.stderr.write(
+            `[shmcp] 启动 MCP stdio 服务失败: ${message}\n`,
+        );
+        process.exit(1);
+    }
+} else {
+    await program.parseAsync(
+        process.argv,
+    );
+}

@@ -13,8 +13,8 @@
     }
   },
   "bin": {
-    "shdev-mcp": "./dist/bin.js",
-    "shdev-mcp-http": "./dist/http-bin.js"
+    "shmcp": "./dist/bin.js",
+    "shmcp-http": "./dist/http-bin.js"
   },
   "files": [
     "dist"

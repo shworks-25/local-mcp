@@ -97,7 +97,7 @@ export const GlobalConfigSchema = z.object({
      * restricted shell 模式允许执行的程序白名单。
      *
      * 默认预置常用且标准的主流语言构建与版本控制工具链，
-     * 保证开发者通过 Homebrew 安装后拥有开箱即用的顺畅体验，
+     * 保证开发者安装后拥有开箱即用的顺畅体验，
      * 同时将执行范围严格限制在已知合法工具之内。
      */
     allowedPrograms: z.array(z.string()).default([
