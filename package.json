@@ -5,6 +5,14 @@
   "type": "module",
   "description": "Reusable local development toolkit and MCP server",
   "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/shworks-25/local-mcp.git"
+  },
+  "homepage": "https://github.com/shworks-25/local-mcp#readme",
+  "bugs": {
+    "url": "https://github.com/shworks-25/local-mcp/issues"
+  },
   "keywords": [
     "mcp",
     "mcp-server",

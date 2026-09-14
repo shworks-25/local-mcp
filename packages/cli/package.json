@@ -4,6 +4,18 @@
   "type": "module",
   "description": "CLI for shworks-devkit",
   "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/shworks-25/local-mcp.git",
+    "directory": "packages/cli"
+  },
+  "homepage": "https://github.com/shworks-25/local-mcp#readme",
+  "bugs": {
+    "url": "https://github.com/shworks-25/local-mcp/issues"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
   "keywords": [
     "mcp",
     "mcp-server",

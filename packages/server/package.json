@@ -3,6 +3,18 @@
   "version": "0.1.0",
   "license": "Apache-2.0",
   "description": "Model Context Protocol (MCP) server & gateway for SHWorks DevKit",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/shworks-25/local-mcp.git",
+    "directory": "packages/server"
+  },
+  "homepage": "https://github.com/shworks-25/local-mcp#readme",
+  "bugs": {
+    "url": "https://github.com/shworks-25/local-mcp/issues"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
   "keywords": [
     "mcp",
     "mcp-server",
