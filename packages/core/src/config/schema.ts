@@ -59,6 +59,23 @@ export const TaskSchema = z.object({
 
 export type TaskConfig = z.infer<typeof TaskSchema>;
 
+export const SecurityPolicyRuleSchema = z.object({
+    action: z.string().min(1),
+    decision: z.enum([
+        'allow',
+        'approval_required',
+        'deny',
+    ]),
+});
+
+export type SecurityPolicyRule = z.infer<typeof SecurityPolicyRuleSchema>;
+
+export const SecuritySchema = z.object({
+    policies: z.array(SecurityPolicyRuleSchema).default([]),
+});
+
+export type SecurityConfig = z.infer<typeof SecuritySchema>;
+
 export const GlobalConfigSchema = z.object({
     workspaceRoots: z.array(z.string()).default([]),
 
@@ -69,6 +86,14 @@ export const GlobalConfigSchema = z.object({
         write: true,
         delete: false,
         shell: 'restricted',
+    }),
+
+    /**
+     * Core Security Policy 配置。
+     * 数据库、Git、SSH 等高风险能力共享此策略模型。
+     */
+    security: SecuritySchema.default({
+        policies: [],
     }),
 
     /**

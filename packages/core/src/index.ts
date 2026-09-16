@@ -10,6 +10,7 @@ export * from './project/context.js';
 
 export * from './security/path-guard.js';
 export * from './security/permissions.js';
+export * from './security/index.js';
 
 export * from './filesystem/read.js';
 export * from './filesystem/write.js';

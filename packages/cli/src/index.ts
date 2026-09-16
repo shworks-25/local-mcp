@@ -5,6 +5,10 @@ import {
 } from 'node:fs';
 
 import {
+    registerApprovalCommands,
+} from './commands/approval.js';
+
+import {
     Command,
 } from 'commander';
 
@@ -83,6 +87,10 @@ registerDoctorCommand(
 );
 
 registerConfigCommand(
+    program,
+);
+
+registerApprovalCommands(
     program,
 );
 
