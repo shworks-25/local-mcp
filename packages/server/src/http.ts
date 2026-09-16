@@ -1,4 +1,14 @@
 import {
+    existsSync,
+    readFileSync,
+} from 'node:fs';
+
+import {
+    dirname,
+    join,
+} from 'node:path';
+
+import {
     createServer,
     type IncomingMessage,
     type ServerResponse,
@@ -71,6 +81,11 @@ export interface HttpServerOptions {
      */
     allowedHosts?: string[];
 
+    /**
+     * 是否允许通过 URL Query 参数传递 Token 进行鉴权（例如 /mcp?token=xxx）。
+     * 出于安全防护考虑（防止反向代理和中间件访问日志明文记录 Token），默认 false。
+     */
+    allowQueryToken?: boolean;
 }
 
 function isLoopbackHost(host: string): boolean {
@@ -201,11 +216,64 @@ function safeEqual(
 }
 
 /**
- * Bearer Token 验证。
+ * 解析当前是否允许通过 URL Query 传递 Token。
+ *
+ * 裁定优先级：
+ * 1. 代码显式选项 (typeof explicitOption === 'boolean')
+ * 2. 环境变量 (process.env.MCP_ALLOW_QUERY_TOKEN)
+ * 3. 配置文件 (.shmcp.yaml / .devmcp.yaml，支持向父级目录递归检索)
+ * 4. 默认安全基线：false
  */
-function checkAuthorization(
-    req: IncomingMessage,
+export function resolveAllowQueryToken(explicitOption?: boolean): boolean {
+    if (typeof explicitOption === 'boolean') {
+        return explicitOption;
+    }
+
+    const envVal = process.env.MCP_ALLOW_QUERY_TOKEN;
+    if (envVal !== undefined && envVal !== '') {
+        return envVal === '1' || envVal === 'true';
+    }
+
+    try {
+        let current = process.cwd();
+        for (let i = 0; i < 5; i++) {
+            for (const filename of ['.shmcp.yaml', '.devmcp.yaml']) {
+                const filePath = join(current, filename);
+                if (existsSync(filePath)) {
+                    const content = readFileSync(filePath, 'utf8');
+                    if (/allowQueryToken\s*:\s*true/i.test(content)) {
+                        return true;
+                    }
+                    if (/allowQueryToken\s*:\s*false/i.test(content)) {
+                        return false;
+                    }
+                }
+            }
+            const parent = dirname(current);
+            if (parent === current) {
+                break;
+            }
+            current = parent;
+        }
+    } catch {
+        // ignore
+    }
+
+    return false;
+}
+
+/**
+ * 校验请求授权状态。
+ *
+ * 优先从请求头 Authorization: Bearer <token> 提取；
+ * 仅在配置显式允许 (allowQueryToken === true) 时，才尝试从 URL Query（?token=...、?authToken=... 或 ?api_key=...）中提取。
+ * 出于安全防御考虑，默认禁用 URL Query 传递 Token，防止反向代理和中间件日志明文记录敏感凭据。
+ */
+export function checkAuthorization(
+    req: IncomingMessage | { headers: Record<string, string | undefined> },
     authToken?: string,
+    url?: URL,
+    allowQueryToken?: boolean,
 ): boolean {
     /*
      * 没配置 Token：
@@ -220,29 +288,51 @@ function checkAuthorization(
     const authorization =
         req.headers.authorization;
 
-    if (!authorization) {
-        return false;
+    if (authorization) {
+        const prefix = 'Bearer ';
+
+        if (
+            authorization.startsWith(
+                prefix,
+            )
+        ) {
+            const token =
+                authorization
+                    .slice(prefix.length)
+                    .trim();
+
+            if (
+                safeEqual(
+                    token,
+                    authToken,
+                )
+            ) {
+                return true;
+            }
+        }
     }
 
-    const prefix = 'Bearer ';
+    const isQueryAllowed =
+        resolveAllowQueryToken(allowQueryToken);
 
-    if (
-        !authorization.startsWith(
-            prefix,
-        )
-    ) {
-        return false;
+    if (url && isQueryAllowed) {
+        const queryToken =
+            url.searchParams.get('token') ??
+            url.searchParams.get('authToken') ??
+            url.searchParams.get('api_key');
+
+        if (
+            queryToken &&
+            safeEqual(
+                queryToken.trim(),
+                authToken,
+            )
+        ) {
+            return true;
+        }
     }
 
-    const token =
-        authorization
-            .slice(prefix.length)
-            .trim();
-
-    return safeEqual(
-        token,
-        authToken,
-    );
+    return false;
 }
 
 /**
@@ -556,6 +646,11 @@ export function startHttpServer(
     const maxBodyBytes =
         options.maxBodyBytes ??
         DEFAULT_MAX_REQUEST_BODY_BYTES;
+
+    const allowQueryToken =
+        resolveAllowQueryToken(options.allowQueryToken);
+
+    options.allowQueryToken = allowQueryToken;
 
     if (!isLoopbackHost(host)) {
         if (!options.authToken) {
@@ -914,7 +1009,11 @@ export function startHttpServer(
                                     '/mcp',
                             },
                             authentication: {
-                                type: 'bearer',
+                                type: allowQueryToken
+                                    ? 'none'
+                                    : options.authToken
+                                      ? 'bearer'
+                                      : 'none',
                             },
                         },
                     );
@@ -968,6 +1067,8 @@ export function startHttpServer(
                     !checkAuthorization(
                         req,
                         options.authToken,
+                        url,
+                        allowQueryToken,
                     )
                 ) {
                     if (isFailedAuthRateLimited(req)) {
@@ -987,6 +1088,12 @@ export function startHttpServer(
                         return;
                     }
 
+                    const hasQueryToken = Boolean(
+                        url.searchParams.get('token') ??
+                        url.searchParams.get('authToken') ??
+                        url.searchParams.get('api_key'),
+                    );
+
                     httpLogger.warn(
                         {
                             ip:
@@ -997,8 +1104,13 @@ export function startHttpServer(
                                 url.pathname,
                             userAgent:
                                 req.headers['user-agent'],
+                            hasQueryToken,
+                            allowQueryToken:
+                                Boolean(allowQueryToken),
                         },
-                        'Security audit: unauthorized MCP request rejected',
+                        hasQueryToken && !allowQueryToken
+                            ? 'Security audit: unauthorized MCP request rejected (URL query token is disabled by policy)'
+                            : 'Security audit: unauthorized MCP request rejected',
                     );
 
                     res.setHeader(
@@ -1120,6 +1232,10 @@ export function startHttpServer(
                     authEnabled:
                         Boolean(
                             options.authToken,
+                        ),
+                    allowQueryToken:
+                        Boolean(
+                            allowQueryToken,
                         ),
                 },
                 'shworks-devkit Remote MCP started',

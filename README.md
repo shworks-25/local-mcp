@@ -247,6 +247,7 @@ MCP_AUTH_TOKEN
 MCP_ALLOW_INSECURE_HTTP
 MCP_MAX_BODY_BYTES
 MCP_ALLOWED_HOSTS
+MCP_ALLOW_QUERY_TOKEN
 ```
 
 `MCP_ALLOWED_HOSTS` is only for trusted HTTP Host values (for example, a reverse-proxy hostname). Authenticated MCP requests do not depend on browser `Origin` / `Referer` headers. Browser-source checks are enforced only for unauthenticated loopback mode.

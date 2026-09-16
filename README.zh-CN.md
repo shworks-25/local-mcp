@@ -249,6 +249,7 @@ Endpoint: http://127.0.0.1:8787/mcp
 | `MCP_ALLOW_INSECURE_HTTP` | `0` | 是否显式允许在非回环地址上使用明文 HTTP |
 | `MCP_MAX_BODY_BYTES` | `16777216` (16MB) | 单次请求体最大字节限制（支持流式 chunked 熔断） |
 | `MCP_ALLOWED_HOSTS` | *(空)* | 受信任的 Host 白名单，多个以英文逗号分隔，仅用于 Host header / 反向代理校验 |
+| `MCP_ALLOW_QUERY_TOKEN` | `0` | 是否允许通过 URL Query 传递鉴权 Token（如 `/mcp?token=xxx`，适用于 Claude.ai Web） |
 
 启动范例：
 

@@ -237,6 +237,19 @@ export const ProjectConfigSchema = z.object({
             SshConnectionSchema,
         ).default({}),
     }).default({ connections: {} }),
+
+    /**
+     * HTTP MCP 服务端配置。
+     */
+    http: z.object({
+        /**
+         * 是否允许通过 URL Query 传递鉴权 Token（例如 /mcp?token=xxx）。
+         * 出于安全防护考虑（防止反向代理和中间件访问日志明文记录 Token），默认 false。
+         */
+        allowQueryToken: z.boolean().default(false),
+    }).default({ allowQueryToken: false }),
 });
+
+export type HttpConfig = z.infer<typeof ProjectConfigSchema>['http'];
 
 export type ProjectConfig = z.infer<typeof ProjectConfigSchema>;

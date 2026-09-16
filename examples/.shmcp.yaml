@@ -22,6 +22,12 @@ protected:
   - "*.cer"
   - "*.p8"
 
+# HTTP MCP 选项配置
+http:
+  # 是否允许通过 URL Query 参数传递鉴权 Token（如 /mcp?token=xxx），默认 false
+  # 适用于 Claude.ai 等不支持自定义 HTTP Header 的网页客户端；开启后请确保反向代理关闭了 access_log
+  allowQueryToken: false
+
 # SSH MCP 连接配置。
 # SSH 被设计为可复用的基础能力：除了 ssh_exec 外，后续 Database MCP 也可以
 # 引用这里的 connection name 建立 SSH Tunnel，而无需重复配置跳板机凭据。
