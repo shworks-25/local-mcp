@@ -119,17 +119,42 @@ export function matchesPattern(
     );
 }
 
+/**
+ * 判断路径是否最终属于受保护集合，并支持 gitignore 风格的 `!` 显式例外规则。
+ *
+ * 规则按声明顺序处理：普通规则命中后将路径标记为 protected；以 `!` 开头的规则
+ * 命中后取消 protected。后续规则仍可再次覆盖前面的结果，因此配置文件能够表达
+ * “默认保护一类文件，但明确开放安全模板”的策略，例如：
+ *
+ *   .env.*
+ *   !.env.example
+ *
+ * 此时 .env.production 仍受保护，而 .env.example 可由文件/Git 工具正常维护。
+ * `!` 只作为 matchesAnyPattern 的策略操作符；matchesPattern 本身继续负责纯 glob 匹配。
+ */
 export function matchesAnyPattern(
     file: string,
     patterns: string[],
 ): boolean {
-    return patterns.some(
-        (pattern) =>
-            matchesPattern(
-                file,
-                pattern,
-            ),
-    );
+    let protectedMatch = false;
+
+    for (const rawPattern of patterns) {
+        const isException = rawPattern.startsWith('!');
+        const pattern = isException
+            ? rawPattern.slice(1)
+            : rawPattern;
+
+        // 空的 `!` 没有合法匹配目标，直接忽略，避免把它解释成全局例外。
+        if (!pattern) {
+            continue;
+        }
+
+        if (matchesPattern(file, pattern)) {
+            protectedMatch = !isException;
+        }
+    }
+
+    return protectedMatch;
 }
 
 export function assertNotProtected(
