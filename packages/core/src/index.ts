@@ -40,3 +40,4 @@ export * from './dev/server-manager.js';
 export * from './workspace/snapshot.js';
 export * from './security/scan.js';
 export * from './runtime/developer-runtime.js';
+export * from './runtime/operations.js';

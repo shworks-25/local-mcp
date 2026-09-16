@@ -2,6 +2,10 @@ import type {
     ResolvedProject,
 } from '../project/resolver.js';
 
+import type {
+    OperationContext,
+} from '../runtime/operations.js';
+
 import {
     assertPermission,
     matchesAnyPattern,
@@ -38,28 +42,24 @@ function assertSafePath(
 export async function gitAdd(
     project: ResolvedProject,
     paths: string[],
+    operation?: OperationContext,
 ): Promise<string> {
-    assertPermission(
-        project.permissions,
-        'write',
-    );
+    const step = async <T>(name: string, action: () => Promise<T> | T, message?: string) =>
+        operation ? operation.step(name, action, message) : action();
 
-    if (paths.length === 0) {
-        throw new Error('至少需要一个待暂存路径');
-    }
+    await step('permission_check', () => {
+        assertPermission(project.permissions, 'write');
+    }, '检查项目 Git 写权限');
 
-    for (const path of paths) {
-        assertSafePath(project, path);
-    }
+    await step('path_validation', () => {
+        if (paths.length === 0) throw new Error('至少需要一个待暂存路径');
+        for (const path of paths) assertSafePath(project, path);
+    }, `校验 ${paths.length} 个待暂存路径及 protected patterns`);
 
-    await runGit(
+    await step('git_add', () => runGit(
         project,
-        [
-            'add',
-            '--',
-            ...paths,
-        ],
-    );
+        ['add', '--', ...paths],
+    ), '执行受控 git add');
 
     return `已暂存 ${paths.length} 个路径`;
 }
@@ -78,42 +78,34 @@ export async function gitCommit(
     project: ResolvedProject,
     message: string,
     paths?: string[],
+    operation?: OperationContext,
 ): Promise<string> {
-    assertPermission(
-        project.permissions,
-        'write',
-    );
+    const step = async <T>(name: string, action: () => Promise<T> | T, detail?: string) =>
+        operation ? operation.step(name, action, detail) : action();
+
+    await step('permission_check', () => {
+        assertPermission(project.permissions, 'write');
+    }, '检查项目 Git 写权限');
 
     const trimmed = message.trim();
-    if (!trimmed) {
-        throw new Error('提交信息不能为空');
-    }
+    await step('commit_message_validation', () => {
+        if (!trimmed) throw new Error('提交信息不能为空');
+    }, '检查 commit message');
 
-    if (paths) {
-        if (paths.length === 0) {
-            throw new Error('paths 存在时至少需要一个待提交路径');
-        }
-        for (const path of paths) {
-            assertSafePath(project, path);
-        }
-    }
+    await step('path_validation', () => {
+        if (!paths) return;
+        if (paths.length === 0) throw new Error('paths 存在时至少需要一个待提交路径');
+        for (const path of paths) assertSafePath(project, path);
+    }, paths
+        ? `校验 ${paths.length} 个提交路径及 protected patterns`
+        : '未指定 paths，将提交当前暂存区');
 
-    const result = await runGit(
+    const result = await step('git_commit', () => runGit(
         project,
         paths
-            ? [
-                'commit',
-                '-m',
-                trimmed,
-                '--',
-                ...paths,
-            ]
-            : [
-                'commit',
-                '-m',
-                trimmed,
-            ],
-    );
+            ? ['commit', '-m', trimmed, '--', ...paths]
+            : ['commit', '-m', trimmed],
+    ), '执行受控 git commit');
 
     return result.stdout.trim();
 }
@@ -122,34 +114,28 @@ export async function gitPush(
     project: ResolvedProject,
     remote = 'origin',
     branch?: string,
+    operation?: OperationContext,
 ): Promise<string> {
-    assertPermission(
-        project.permissions,
-        'write',
-    );
+    const step = async <T>(name: string, action: () => Promise<T> | T, detail?: string) =>
+        operation ? operation.step(name, action, detail) : action();
 
-    const safeName = /^[A-Za-z0-9._/-]+$/;
-    if (
-        remote.startsWith('-') ||
-        (branch && branch.startsWith('-'))
-    ) {
-        throw new Error(
-            'remote 或 branch 名称不能以 "-" 开头',
-        );
-    }
-    if (!safeName.test(remote)) {
-        throw new Error('remote 名称不合法');
-    }
-    if (branch && !safeName.test(branch)) {
-        throw new Error('branch 名称不合法');
-    }
+    await step('permission_check', () => {
+        assertPermission(project.permissions, 'write');
+    }, '检查项目 Git 写权限');
 
-    const result = await runGit(
+    await step('remote_validation', () => {
+        const safeName = /^[A-Za-z0-9._/-]+$/;
+        if (remote.startsWith('-') || (branch && branch.startsWith('-'))) {
+            throw new Error('remote 或 branch 名称不能以 "-" 开头');
+        }
+        if (!safeName.test(remote)) throw new Error('remote 名称不合法');
+        if (branch && !safeName.test(branch)) throw new Error('branch 名称不合法');
+    }, '校验 remote 与 branch 参数，阻止 Git option 注入');
+
+    const result = await step('git_push', () => runGit(
         project,
-        branch
-            ? ['push', remote, '--', branch]
-            : ['push', remote],
-    );
+        branch ? ['push', remote, '--', branch] : ['push', remote],
+    ), '执行受控 git push');
 
     return (result.stdout || result.stderr).trim();
 }

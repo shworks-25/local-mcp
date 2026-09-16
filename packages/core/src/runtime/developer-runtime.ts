@@ -110,6 +110,7 @@ export class DeveloperRuntime {
                 'test result cache',
                 'dev process manager',
                 'workspace snapshots',
+                'operation audit records',
             ],
             execution: [
                 'test',

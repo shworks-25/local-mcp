@@ -39,6 +39,10 @@ import {
     registerSshTools,
 } from './tools/ssh.js';
 
+import {
+    registerOperationTools,
+} from './tools/operations.js';
+
 const packageVersion = (
     JSON.parse(
         readFileSync(
@@ -92,7 +96,10 @@ export function buildServer(
 
     registerProjectTools(server);
     registerFileTools(server);
-    registerGitTools(server);
+    // Operation Runtime 必须与 Git/SSH/Developer tools 使用同一个 runtime，
+    // 这样一次 MCP 会话中的执行记录可以被 operation_list/get 稳定查询。
+    registerOperationTools(server, runtime);
+    registerGitTools(server, runtime);
     registerShellTools(server);
     registerSshTools(server, runtime);
     registerDeveloperTools(
