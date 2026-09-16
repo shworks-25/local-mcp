@@ -27,6 +27,7 @@ import {
     workspaceRestorePreview,
     workspaceSnapshot,
     workspaceSnapshotList,
+    startOperation,
 } from '@shworks/local-core';
 
 import {
@@ -47,11 +48,21 @@ export function registerDeveloperTools(
         },
         async ({ project }) =>
             safeResult(
-                async () =>
-                    testRun(
-                        runtime,
-                        await resolveProject(project),
-                    ),
+                async () => {
+                    const operation = startOperation(runtime, 'test_run', project);
+                    try {
+                        const resolved = await operation.step('resolve_project', () => resolveProject(project), '解析并加载已注册项目');
+                        const result = await operation.step('run_tests', () => testRun(runtime, resolved), '运行项目测试并收集诊断');
+                        // 测试输出可能很长，因此写入有界 Operation log；查询接口可按 sequence 增量读取。
+                        operation.log('info', result.stdout, 'stdout');
+                        operation.log(result.success ? 'info' : 'error', result.stderr, 'stderr');
+                        operation.complete({ success: result.success, code: result.code, timedOut: result.timedOut, diagnosticCount: result.diagnostics.length });
+                        return { operationId: operation.id, result };
+                    } catch (error) {
+                        operation.fail(error);
+                        throw error;
+                    }
+                },
                 {
                     toolName: 'test_run',
                     params: { project },
@@ -91,10 +102,20 @@ export function registerDeveloperTools(
         },
         async ({ project }) =>
             safeResult(
-                async () =>
-                    typecheck(
-                        await resolveProject(project),
-                    ),
+                async () => {
+                    const operation = startOperation(runtime, 'typecheck', project);
+                    try {
+                        const resolved = await operation.step('resolve_project', () => resolveProject(project), '解析并加载已注册项目');
+                        const result = await operation.step('run_typecheck', () => typecheck(resolved), '运行项目类型检查并收集诊断');
+                        operation.log('info', result.stdout, 'stdout');
+                        operation.log(result.success ? 'info' : 'error', result.stderr, 'stderr');
+                        operation.complete({ success: result.success, code: result.code, timedOut: result.timedOut, diagnosticCount: result.diagnostics.length });
+                        return { operationId: operation.id, result };
+                    } catch (error) {
+                        operation.fail(error);
+                        throw error;
+                    }
+                },
                 {
                     toolName: 'typecheck',
                     params: { project },
@@ -112,10 +133,20 @@ export function registerDeveloperTools(
         },
         async ({ project }) =>
             safeResult(
-                async () =>
-                    lint(
-                        await resolveProject(project),
-                    ),
+                async () => {
+                    const operation = startOperation(runtime, 'lint', project);
+                    try {
+                        const resolved = await operation.step('resolve_project', () => resolveProject(project), '解析并加载已注册项目');
+                        const result = await operation.step('run_lint', () => lint(resolved), '运行项目 lint 并收集诊断');
+                        operation.log('info', result.stdout, 'stdout');
+                        operation.log(result.success ? 'info' : 'error', result.stderr, 'stderr');
+                        operation.complete({ success: result.success, code: result.code, timedOut: result.timedOut, diagnosticCount: result.diagnostics.length });
+                        return { operationId: operation.id, result };
+                    } catch (error) {
+                        operation.fail(error);
+                        throw error;
+                    }
+                },
                 {
                     toolName: 'lint',
                     params: { project },
@@ -303,16 +334,29 @@ export function registerDeveloperTools(
         },
         async ({ project, script, args, timeoutMs }) =>
             safeResult(
-                async () =>
-                    packageRunScript(
-                        await resolveProject(project),
-                        script,
-                        args,
-                        timeoutMs,
-                    ),
+                async () => {
+                    const operation = startOperation(runtime, 'package_run_script', project);
+                    try {
+                        const resolved = await operation.step('resolve_project', () => resolveProject(project), '解析并加载已注册项目');
+                        const result = await operation.step('run_package_script', () => packageRunScript(
+                            resolved,
+                            script,
+                            args,
+                            timeoutMs,
+                        ), `运行 package script: ${script}`);
+                        operation.log('info', result.stdout, 'stdout');
+                        operation.log(result.code === 0 && !result.timedOut ? 'info' : 'error', result.stderr, 'stderr');
+                        operation.complete({ script, argCount: args.length, success: result.code === 0 && !result.timedOut, code: result.code, timedOut: result.timedOut });
+                        return { operationId: operation.id, result };
+                    } catch (error) {
+                        operation.fail(error);
+                        throw error;
+                    }
+                },
                 {
                     toolName: 'package_run_script',
-                    params: { project, script, args, timeoutMs },
+                    // script 参数本身可审计；argv 可能含业务值，因此只记录数量。
+                    params: { project, script, argCount: args.length, timeoutMs },
                 },
             ),
     );

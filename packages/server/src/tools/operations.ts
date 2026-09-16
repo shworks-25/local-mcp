@@ -5,6 +5,7 @@ import {
     type DeveloperRuntime,
     operationGet,
     operationList,
+    operationLogs,
 } from '@shworks/local-core';
 
 import { safeResult } from '../result.js';
@@ -29,6 +30,21 @@ export function registerOperationTools(
         async ({ project, limit }) => safeResult(
             async () => operationList(runtime, project, limit),
             { toolName: 'operation_list', params: { project, limit } },
+        ),
+    );
+
+    server.registerTool(
+        'operation_logs',
+        {
+            description: '增量读取指定 Operation 的有界执行日志；after 为上次已读取的 sequence',
+            inputSchema: z.object({
+                id: z.string().min(1),
+                after: z.number().int().min(0).default(0),
+            }),
+        },
+        async ({ id, after }) => safeResult(
+            async () => operationLogs(runtime, id, after),
+            { toolName: 'operation_logs', params: { id, after } },
         ),
     );
 

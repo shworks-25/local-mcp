@@ -10,6 +10,7 @@ import {
     sshTunnelClose,
     sshTunnelList,
     sshTunnelOpen,
+    startOperation,
 } from '@shworks/local-core';
 
 import { safeResult } from '../result.js';
@@ -49,7 +50,18 @@ export function registerSshTools(
             }),
         },
         async ({ project, connection }) => safeResult(
-            async () => sshTestConnection(await resolveProject(project), connection),
+            async () => {
+                const operation = startOperation(runtime, 'ssh_test_connection', project);
+                try {
+                    const resolved = await operation.step('resolve_project', () => resolveProject(project), '解析项目与 SSH profile 配置');
+                    const result = await operation.step('ssh_connect', () => sshTestConnection(resolved, connection), '执行 Host Key 校验与 SSH 身份认证');
+                    operation.complete({ connection, authType: result.authType, connected: true });
+                    return { operationId: operation.id, result };
+                } catch (error) {
+                    operation.fail(error);
+                    throw error;
+                }
+            },
             { toolName: 'ssh_test_connection', params: { project, connection } },
         ),
     );
@@ -67,13 +79,25 @@ export function registerSshTools(
             }),
         },
         async ({ project, connection, program, args, timeoutMs }) => safeResult(
-            async () => sshExec(
-                await resolveProject(project),
-                connection,
-                program,
-                args,
-                timeoutMs,
-            ),
+            async () => {
+                const operation = startOperation(runtime, 'ssh_exec', project);
+                try {
+                    const resolved = await operation.step('resolve_project', () => resolveProject(project), '解析项目与 SSH profile 配置');
+                    const result = await operation.step('ssh_exec', () => sshExec(
+                        resolved,
+                        connection,
+                        program,
+                        args,
+                        timeoutMs,
+                    ), `执行白名单远程程序 ${program}`);
+                    // stdout/stderr 属于远程业务输出，不默认复制到 Operation logs，避免敏感数据二次留存。
+                    operation.complete({ connection, program, argCount: args.length, code: result.code, timedOut: result.timedOut });
+                    return { operationId: operation.id, result };
+                } catch (error) {
+                    operation.fail(error);
+                    throw error;
+                }
+            },
             {
                 toolName: 'ssh_exec',
                 // 不把远程 argv 写入通用工具日志。参数可能包含业务数据甚至临时 token；
@@ -90,20 +114,32 @@ export function registerSshTools(
             inputSchema: z.object({
                 project: z.string().min(1),
                 connection: z.string().min(1),
-                localPort: z.number().int().min(1).max(65535),
+                // 0 表示请求操作系统分配临时 loopback 端口，避免调用方自行猜测空闲端口。
+                localPort: z.number().int().min(0).max(65535),
                 remoteHost: z.string().min(1),
                 remotePort: z.number().int().min(1).max(65535),
             }),
         },
         async ({ project, connection, localPort, remoteHost, remotePort }) => safeResult(
-            async () => sshTunnelOpen(
-                runtime,
-                await resolveProject(project),
-                connection,
-                localPort,
-                remoteHost,
-                remotePort,
-            ),
+            async () => {
+                const operation = startOperation(runtime, 'ssh_tunnel_open', project);
+                try {
+                    const resolved = await operation.step('resolve_project', () => resolveProject(project), '解析项目与 SSH profile 配置');
+                    const result = await operation.step('ssh_tunnel_open', () => sshTunnelOpen(
+                        runtime,
+                        resolved,
+                        connection,
+                        localPort,
+                        remoteHost,
+                        remotePort,
+                    ), '建立仅监听 127.0.0.1 的 SSH TCP forwarding');
+                    operation.complete({ connection, localPort: result.localPort, remotePort });
+                    return { operationId: operation.id, result };
+                } catch (error) {
+                    operation.fail(error);
+                    throw error;
+                }
+            },
             {
                 toolName: 'ssh_tunnel_open',
                 params: { project, connection, localPort, remoteHost, remotePort },

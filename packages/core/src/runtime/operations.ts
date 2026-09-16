@@ -15,6 +15,14 @@ export interface OperationStep {
     durationMs?: number;
 }
 
+export interface OperationLog {
+    sequence: number;
+    timestamp: string;
+    level: 'info' | 'warn' | 'error';
+    stream?: 'stdout' | 'stderr';
+    message: string;
+}
+
 export interface OperationRecord {
     id: string;
     tool: string;
@@ -25,6 +33,8 @@ export interface OperationRecord {
     durationMs?: number;
     steps: OperationStep[];
     warnings: string[];
+    logs: OperationLog[];
+    nextLogSequence: number;
     resultSummary?: unknown;
     error?: { message: string };
 }
@@ -36,6 +46,8 @@ interface OperationStore {
 const STORE_KEY = 'operations';
 const MAX_OPERATIONS = 100;
 const MAX_WARNINGS = 50;
+const MAX_LOGS = 1000;
+const MAX_LOG_CHARS = 256_000;
 
 function now(): string {
     return new Date().toISOString();
@@ -103,6 +115,34 @@ export class OperationContext {
         if (this.record.warnings.length < MAX_WARNINGS) {
             this.record.warnings.push(message);
         }
+        this.log('warn', message);
+    }
+
+    /**
+     * Operation log 使用有界 ring-buffer 思路：最多 1000 条且总字符数不超过 256KB。
+     * 调用方必须传入已脱敏内容；这里适合保存构建 stdout/stderr 等执行事实，不保存 secret。
+     */
+    log(
+        level: OperationLog['level'],
+        message: string,
+        stream?: OperationLog['stream'],
+    ): void {
+        if (!message) return;
+        const log: OperationLog = {
+            sequence: this.record.nextLogSequence++,
+            timestamp: now(),
+            level,
+            stream,
+            message,
+        };
+        this.record.logs.push(log);
+
+        let chars = this.record.logs.reduce((total, item) => total + item.message.length, 0);
+        while (this.record.logs.length > MAX_LOGS || chars > MAX_LOG_CHARS) {
+            const removed = this.record.logs.shift();
+            if (!removed) break;
+            chars -= removed.message.length;
+        }
     }
 
     complete(resultSummary?: unknown): void {
@@ -139,6 +179,8 @@ export function startOperation(
         startedAt: now(),
         steps: [],
         warnings: [],
+        logs: [],
+        nextLogSequence: 1,
     };
     store.records.set(record.id, record);
     return new OperationContext(record);
@@ -162,4 +204,13 @@ export function operationGet(
     const record = storeFor(runtime).records.get(id);
     if (!record) throw new Error('Operation 不存在或已过期');
     return record;
+}
+
+export function operationLogs(
+    runtime: DeveloperRuntime,
+    id: string,
+    after = 0,
+): OperationLog[] {
+    return operationGet(runtime, id).logs
+        .filter((log) => log.sequence > after);
 }

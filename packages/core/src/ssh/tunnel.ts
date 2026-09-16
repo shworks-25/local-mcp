@@ -49,8 +49,10 @@ export async function sshTunnelOpen(
     remotePort: number,
 ): Promise<SshTunnelInfo> {
     if (!project.record.trusted) throw new Error('未受信任项目禁止建立 SSH 隧道');
-    if (localPort < 1 || localPort > 65535 || remotePort < 1 || remotePort > 65535) {
-        throw new Error('SSH 隧道端口必须位于 1-65535');
+    // localPort=0 交给操作系统分配临时端口，特别适合数据库工具并发建立短生命周期隧道；
+    // remotePort 仍必须是明确的远端服务端口。
+    if (localPort < 0 || localPort > 65535 || remotePort < 1 || remotePort > 65535) {
+        throw new Error('SSH 隧道 localPort 必须位于 0-65535，remotePort 必须位于 1-65535');
     }
     if (!remoteHost || remoteHost.startsWith('-') || /[\s\0]/.test(remoteHost)) {
         throw new Error('SSH 隧道 remoteHost 不合法');
@@ -89,12 +91,20 @@ export async function sshTunnelOpen(
         throw error;
     }
 
+    const address = server.address();
+    if (!address || typeof address === 'string') {
+        server.close();
+        client.end();
+        throw new Error('无法确定 SSH 隧道实际本地端口');
+    }
+
     const info: ManagedTunnel = {
         id: randomUUID(),
         project: project.record.name,
         connection: connectionName,
         localHost: '127.0.0.1',
-        localPort,
+        // 当请求 localPort=0 时必须返回 OS 实际分配的端口，否则数据库上层无法连接。
+        localPort: address.port,
         remoteHost,
         remotePort,
         createdAt: new Date().toISOString(),
