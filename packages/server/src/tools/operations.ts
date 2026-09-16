@@ -36,7 +36,7 @@ export function registerOperationTools(
     server.registerTool(
         'operation_logs',
         {
-            description: '增量读取指定 Operation 的有界执行日志；after 为上次已读取的 sequence',
+            description: '增量读取指定 Operation 的有界执行日志；返回 nextAfter/truncated，客户端可据此安全分页并识别已淘汰日志',
             inputSchema: z.object({
                 id: z.string().min(1),
                 after: z.number().int().min(0).default(0),
@@ -51,7 +51,7 @@ export function registerOperationTools(
     server.registerTool(
         'operation_get',
         {
-            description: '查看指定 Operation 的安全执行轨迹、步骤耗时和失败位置',
+            description: '查看指定 Operation 的安全执行轨迹、步骤耗时和失败位置；不返回长日志，日志请使用 operation_logs',
             inputSchema: z.object({ id: z.string().min(1) }),
         },
         async ({ id }) => safeResult(

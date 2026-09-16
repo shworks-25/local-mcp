@@ -12,7 +12,7 @@ import {
     gitPush,
     gitStatus,
     resolveProject,
-    startOperation,
+    runOperation,
     type DeveloperRuntime,
 } from '@shworks/local-core';
 
@@ -116,22 +116,19 @@ export function registerGitTools(
         },
         async ({ project, paths }) =>
             safeResult(
-                async () => {
-                    const operation = startOperation(runtime, 'git_add', project);
-                    try {
+                async () => runOperation(
+                    runtime,
+                    { tool: 'git_add', project },
+                    async (operation) => {
                         const resolved = await operation.step(
                             'resolve_project',
                             () => resolveProject(project),
                             '解析并加载已注册项目',
                         );
                         const result = await gitAdd(resolved, paths, operation);
-                        operation.complete({ pathCount: paths.length });
-                        return { operationId: operation.id, result };
-                    } catch (error) {
-                        operation.fail(error);
-                        throw error;
-                    }
-                },
+                        return { result, summary: { pathCount: paths.length } };
+                    },
+                ),
                 {
                     toolName: 'git_add',
                     // 只记录路径数量；具体路径已经保存在 Git 工作区，不需要复制进通用日志。
@@ -158,22 +155,19 @@ export function registerGitTools(
         },
         async ({ project, message, paths }) =>
             safeResult(
-                async () => {
-                    const operation = startOperation(runtime, 'git_commit', project);
-                    try {
+                async () => runOperation(
+                    runtime,
+                    { tool: 'git_commit', project },
+                    async (operation) => {
                         const resolved = await operation.step(
                             'resolve_project',
                             () => resolveProject(project),
                             '解析并加载已注册项目',
                         );
                         const result = await gitCommit(resolved, message, paths, operation);
-                        operation.complete({ pathCount: paths?.length, scoped: Boolean(paths) });
-                        return { operationId: operation.id, result };
-                    } catch (error) {
-                        operation.fail(error);
-                        throw error;
-                    }
-                },
+                        return { result, summary: { pathCount: paths?.length, scoped: Boolean(paths) } };
+                    },
+                ),
                 {
                     toolName: 'git_commit',
                     // commit message 和路径都可能携带业务上下文；审计日志只保留安全摘要。
@@ -196,22 +190,19 @@ export function registerGitTools(
         },
         async ({ project, remote, branch }) =>
             safeResult(
-                async () => {
-                    const operation = startOperation(runtime, 'git_push', project);
-                    try {
+                async () => runOperation(
+                    runtime,
+                    { tool: 'git_push', project },
+                    async (operation) => {
                         const resolved = await operation.step(
                             'resolve_project',
                             () => resolveProject(project),
                             '解析并加载已注册项目',
                         );
                         const result = await gitPush(resolved, remote, branch, operation);
-                        operation.complete({ remote, branchSpecified: Boolean(branch) });
-                        return { operationId: operation.id, result };
-                    } catch (error) {
-                        operation.fail(error);
-                        throw error;
-                    }
-                },
+                        return { result, summary: { remote, branchSpecified: Boolean(branch) } };
+                    },
+                ),
                 {
                     toolName: 'git_push',
                     params: { project, remote, branchSpecified: Boolean(branch) },

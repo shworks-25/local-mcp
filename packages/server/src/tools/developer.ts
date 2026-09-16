@@ -27,7 +27,7 @@ import {
     workspaceRestorePreview,
     workspaceSnapshot,
     workspaceSnapshotList,
-    startOperation,
+    runOperation,
 } from '@shworks/local-core';
 
 import {
@@ -41,28 +41,29 @@ export function registerDeveloperTools(
     server.registerTool(
         'test_run',
         {
-            description: '运行项目测试并返回结构化诊断结果',
+            description: '运行项目测试并返回 { operationId, result }；result 仅保留结构化摘要/诊断，stdout/stderr 请通过 operation_logs 增量读取',
             inputSchema: z.object({
                 project: z.string().min(1),
             }),
         },
         async ({ project }) =>
             safeResult(
-                async () => {
-                    const operation = startOperation(runtime, 'test_run', project);
-                    try {
+                async () => runOperation(
+                    runtime,
+                    { tool: 'test_run', project },
+                    async (operation) => {
                         const resolved = await operation.step('resolve_project', () => resolveProject(project), '解析并加载已注册项目');
                         const result = await operation.step('run_tests', () => testRun(runtime, resolved), '运行项目测试并收集诊断');
-                        // 测试输出可能很长，因此写入有界 Operation log；查询接口可按 sequence 增量读取。
                         operation.log('info', result.stdout, 'stdout');
                         operation.log(result.success ? 'info' : 'error', result.stderr, 'stderr');
-                        operation.complete({ success: result.success, code: result.code, timedOut: result.timedOut, diagnosticCount: result.diagnostics.length });
-                        return { operationId: operation.id, result };
-                    } catch (error) {
-                        operation.fail(error);
-                        throw error;
-                    }
-                },
+                        // 重型质量工具只返回结构化摘要；完整 stdout/stderr 通过 operation_logs 按需读取，避免 MCP 响应重复携带长日志。
+                        const compactResult = { ...result, stdout: '', stderr: '' };
+                        return {
+                            result: compactResult,
+                            summary: { success: result.success, code: result.code, timedOut: result.timedOut, diagnosticCount: result.diagnostics.length },
+                        };
+                    },
+                ),
                 {
                     toolName: 'test_run',
                     params: { project },
@@ -95,27 +96,27 @@ export function registerDeveloperTools(
     server.registerTool(
         'typecheck',
         {
-            description: '运行项目类型检查任务或 package.json 的 typecheck script',
+            description: '运行类型检查并返回 { operationId, result }；可用 operation_get 查看步骤、operation_logs 增量读取有界 stdout/stderr',
             inputSchema: z.object({
                 project: z.string().min(1),
             }),
         },
         async ({ project }) =>
             safeResult(
-                async () => {
-                    const operation = startOperation(runtime, 'typecheck', project);
-                    try {
+                async () => runOperation(
+                    runtime,
+                    { tool: 'typecheck', project },
+                    async (operation) => {
                         const resolved = await operation.step('resolve_project', () => resolveProject(project), '解析并加载已注册项目');
                         const result = await operation.step('run_typecheck', () => typecheck(resolved), '运行项目类型检查并收集诊断');
                         operation.log('info', result.stdout, 'stdout');
                         operation.log(result.success ? 'info' : 'error', result.stderr, 'stderr');
-                        operation.complete({ success: result.success, code: result.code, timedOut: result.timedOut, diagnosticCount: result.diagnostics.length });
-                        return { operationId: operation.id, result };
-                    } catch (error) {
-                        operation.fail(error);
-                        throw error;
-                    }
-                },
+                        return {
+                            result: { ...result, stdout: '', stderr: '' },
+                            summary: { success: result.success, code: result.code, timedOut: result.timedOut, diagnosticCount: result.diagnostics.length },
+                        };
+                    },
+                ),
                 {
                     toolName: 'typecheck',
                     params: { project },
@@ -126,27 +127,27 @@ export function registerDeveloperTools(
     server.registerTool(
         'lint',
         {
-            description: '运行项目 lint 任务或 package.json 的 lint script',
+            description: '运行 lint 并返回 { operationId, result }；可用 operation_get 查看步骤、operation_logs 增量读取有界 stdout/stderr',
             inputSchema: z.object({
                 project: z.string().min(1),
             }),
         },
         async ({ project }) =>
             safeResult(
-                async () => {
-                    const operation = startOperation(runtime, 'lint', project);
-                    try {
+                async () => runOperation(
+                    runtime,
+                    { tool: 'lint', project },
+                    async (operation) => {
                         const resolved = await operation.step('resolve_project', () => resolveProject(project), '解析并加载已注册项目');
                         const result = await operation.step('run_lint', () => lint(resolved), '运行项目 lint 并收集诊断');
                         operation.log('info', result.stdout, 'stdout');
                         operation.log(result.success ? 'info' : 'error', result.stderr, 'stderr');
-                        operation.complete({ success: result.success, code: result.code, timedOut: result.timedOut, diagnosticCount: result.diagnostics.length });
-                        return { operationId: operation.id, result };
-                    } catch (error) {
-                        operation.fail(error);
-                        throw error;
-                    }
-                },
+                        return {
+                            result: { ...result, stdout: '', stderr: '' },
+                            summary: { success: result.success, code: result.code, timedOut: result.timedOut, diagnosticCount: result.diagnostics.length },
+                        };
+                    },
+                ),
                 {
                     toolName: 'lint',
                     params: { project },
@@ -324,7 +325,7 @@ export function registerDeveloperTools(
     server.registerTool(
         'package_run_script',
         {
-            description: '运行 package.json 中已经存在的 script，不接受任意 shell 字符串',
+            description: '运行 package.json 已存在的 script 并返回 { operationId, result }；长 stdout/stderr 可通过 operation_logs 增量读取',
             inputSchema: z.object({
                 project: z.string().min(1),
                 script: z.string().min(1),
@@ -334,9 +335,10 @@ export function registerDeveloperTools(
         },
         async ({ project, script, args, timeoutMs }) =>
             safeResult(
-                async () => {
-                    const operation = startOperation(runtime, 'package_run_script', project);
-                    try {
+                async () => runOperation(
+                    runtime,
+                    { tool: 'package_run_script', project },
+                    async (operation) => {
                         const resolved = await operation.step('resolve_project', () => resolveProject(project), '解析并加载已注册项目');
                         const result = await operation.step('run_package_script', () => packageRunScript(
                             resolved,
@@ -346,13 +348,12 @@ export function registerDeveloperTools(
                         ), `运行 package script: ${script}`);
                         operation.log('info', result.stdout, 'stdout');
                         operation.log(result.code === 0 && !result.timedOut ? 'info' : 'error', result.stderr, 'stderr');
-                        operation.complete({ script, argCount: args.length, success: result.code === 0 && !result.timedOut, code: result.code, timedOut: result.timedOut });
-                        return { operationId: operation.id, result };
-                    } catch (error) {
-                        operation.fail(error);
-                        throw error;
-                    }
-                },
+                        return {
+                            result: { ...result, stdout: '', stderr: '' },
+                            summary: { script, argCount: args.length, success: result.code === 0 && !result.timedOut, code: result.code, timedOut: result.timedOut },
+                        };
+                    },
+                ),
                 {
                     toolName: 'package_run_script',
                     // script 参数本身可审计；argv 可能含业务值，因此只记录数量。

@@ -23,6 +23,11 @@ export interface OperationLog {
     message: string;
 }
 
+export interface OperationResult<T> {
+    operationId: string;
+    result: T;
+}
+
 export interface OperationRecord {
     id: string;
     tool: string;
@@ -186,6 +191,29 @@ export function startOperation(
     return new OperationContext(record);
 }
 
+/**
+ * 统一执行受审计操作，确保任何创建 Operation 的工具都遵守相同生命周期：
+ * started -> callback -> completed；异常则一定进入 failed，避免各 Tool 重复 try/catch 时遗漏收尾。
+ */
+export async function runOperation<T>(
+    runtime: DeveloperRuntime,
+    options: { tool: string; project?: string },
+    callback: (operation: OperationContext) => Promise<{
+        result: T;
+        summary?: unknown;
+    }>,
+): Promise<OperationResult<T>> {
+    const operation = startOperation(runtime, options.tool, options.project);
+    try {
+        const { result, summary } = await callback(operation);
+        operation.complete(summary);
+        return { operationId: operation.id, result };
+    } catch (error) {
+        operation.fail(error);
+        throw error;
+    }
+}
+
 export function operationList(
     runtime: DeveloperRuntime,
     project?: string,
@@ -200,17 +228,56 @@ export function operationList(
 export function operationGet(
     runtime: DeveloperRuntime,
     id: string,
-): OperationRecord {
+): Omit<OperationRecord, 'logs' | 'nextLogSequence'> & {
+    logSummary: {
+        count: number;
+        firstSequence: number | null;
+        lastSequence: number | null;
+    };
+} {
     const record = storeFor(runtime).records.get(id);
     if (!record) throw new Error('Operation 不存在或已过期');
-    return record;
+
+    // metadata 查询不携带 stdout/stderr；长日志必须显式通过 operation_logs 分页读取。
+    const { logs, nextLogSequence: _nextLogSequence, ...metadata } = record;
+    return {
+        ...metadata,
+        logSummary: {
+            count: logs.length,
+            firstSequence: logs[0]?.sequence ?? null,
+            lastSequence: logs.at(-1)?.sequence ?? null,
+        },
+    };
+}
+
+export interface OperationLogsResult {
+    operationId: string;
+    logs: OperationLog[];
+    firstSequence: number | null;
+    lastSequence: number | null;
+    nextAfter: number;
+    truncated: boolean;
 }
 
 export function operationLogs(
     runtime: DeveloperRuntime,
     id: string,
     after = 0,
-): OperationLog[] {
-    return operationGet(runtime, id).logs
-        .filter((log) => log.sequence > after);
+): OperationLogsResult {
+    const record = storeFor(runtime).records.get(id);
+    if (!record) throw new Error('Operation 不存在或已过期');
+
+    const firstSequence = record.logs[0]?.sequence ?? null;
+    const lastSequence = record.logs.at(-1)?.sequence ?? null;
+    const logs = record.logs.filter((log) => log.sequence > after);
+
+    return {
+        operationId: id,
+        logs,
+        firstSequence,
+        lastSequence,
+        nextAfter: logs.at(-1)?.sequence ?? after,
+        // 如果请求位置早于当前 ring buffer 的第一条记录，说明中间日志已经被容量限制淘汰。
+        truncated: firstSequence !== null && after + 1 < firstSequence,
+    };
 }
