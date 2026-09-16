@@ -35,6 +35,10 @@ import {
     registerDeveloperTools,
 } from './tools/developer.js';
 
+import {
+    registerSshTools,
+} from './tools/ssh.js';
+
 const packageVersion = (
     JSON.parse(
         readFileSync(
@@ -90,6 +94,7 @@ export function buildServer(
     registerFileTools(server);
     registerGitTools(server);
     registerShellTools(server);
+    registerSshTools(server, runtime);
     registerDeveloperTools(
         server,
         runtime,

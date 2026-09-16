@@ -27,6 +27,12 @@ export * from './git/mutate.js';
 export * from './shell/process.js';
 export * from './shell/runner.js';
 
+// SSH 是独立基础设施：数据库、远程运维工具等上层能力统一复用这里的连接与隧道实现。
+export * from './ssh/connection.js';
+export * from './ssh/errors.js';
+export * from './ssh/client.js';
+export * from './ssh/tunnel.js';
+
 export * from './package/scripts.js';
 export * from './quality/checks.js';
 export * from './code/symbols.js';

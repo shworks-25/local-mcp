@@ -1,5 +1,6 @@
 import {
     getLogger,
+    getPublicSshError,
     sanitizeLogData,
 } from '@shworks/local-core';
 
@@ -88,10 +89,13 @@ export async function safeResult(
         return textResult(value);
     } catch (error) {
         const durationMs = Math.round(performance.now() - startTime);
-        const message =
+        // SSH 连接错误包含底层 cause 供服务端日志排查，但客户端只能收到
+        // 结构化的安全错误码和脱敏提示。其他错误继续沿用既有行为。
+        const message = getPublicSshError(error) ?? (
             error instanceof Error
                 ? error.message
-                : String(error);
+                : String(error)
+        );
 
         toolLogger.error(
             {

@@ -82,8 +82,11 @@ export const GlobalConfigSchema = z.object({
         '.git/**',
         '.vscode/**',
         '.idea/**',
+        // 环境变量文件通常包含密码、Token 等 secret，因此默认全部保护。
         '.env',
         '.env.*',
+        // .env.example 只应包含公开占位值；显式例外允许 AI 维护并提交配置模板。
+        '!.env.example',
         '*.pem',
         '*.key',
         '*.p12',
@@ -91,6 +94,8 @@ export const GlobalConfigSchema = z.object({
         'id_rsa',
         'id_ed25519',
         '.devmcp.yaml',
+        // examples/.devmcp.yaml 是公开示例配置，不应包含真实凭据；允许 AI 维护文档示例。
+        '!examples/.devmcp.yaml',
     ]),
 
     /**
@@ -131,6 +136,51 @@ export const GlobalConfigSchema = z.object({
 
 export type GlobalConfig = z.infer<typeof GlobalConfigSchema>;
 
+/**
+ * SSH 连接配置。
+ *
+ * SSH 被设计为独立基础能力，而不是数据库的附属实现：未来 MySQL/PostgreSQL
+ * 可以通过 connection 名称复用同一条 SSH 配置和隧道生命周期。
+ * 凭据本身不写入 YAML；usernameEnv 等字段只保存环境变量名称。
+ */
+export const SshAuthSchema = z.discriminatedUnion('type', [
+    z.object({
+        type: z.literal('password'),
+        /** 密码只允许引用环境变量，禁止写入 .devmcp.yaml。 */
+        passwordEnv: z.string().min(1),
+    }),
+    z.object({
+        type: z.literal('private-key'),
+        privateKeyPath: z.string().min(1),
+        /** 加密私钥的 passphrase 同样只允许来自 secret 环境变量。 */
+        passphraseEnv: z.string().min(1).optional(),
+    }),
+]);
+
+export const SshConnectionSchema = z.object({
+    host: z.string().min(1),
+    port: z.number().int().min(1).max(65535).default(22),
+    username: z.string().min(1).optional(),
+    usernameEnv: z.string().min(1).optional(),
+    auth: SshAuthSchema,
+    /**
+     * SHA256 host-key fingerprint，例如 SHA256:xxxx。强制配置可避免自动接受陌生服务器。
+     */
+    hostKeyFingerprint: z.string().min(1),
+    connectTimeoutMs: z.number().int().positive().max(60_000).default(10_000),
+    keepAliveIntervalMs: z.number().int().min(0).max(60_000).default(10_000),
+    /**
+     * 允许 ChatGPT 远程执行的程序白名单。这里保存程序名而不是 shell 命令，
+     * 防止调用方通过配置外的任意命令扩大远程执行权限。
+     */
+    allowedPrograms: z.array(z.string().min(1)).default([]),
+}).refine(
+    (value) => Boolean(value.username || value.usernameEnv),
+    { message: 'SSH 连接必须配置 username 或 usernameEnv' },
+);
+
+export type SshConnectionConfig = z.infer<typeof SshConnectionSchema>;
+
 export const ProjectConfigSchema = z.object({
     name: z.string().optional(),
 
@@ -156,6 +206,17 @@ export const ProjectConfigSchema = z.object({
             TaskSchema,
         )
         .default({}),
+
+    /**
+     * 项目可使用的命名 SSH 连接。数据库等上层能力只引用连接名称，
+     * 不重复保存跳板机地址、身份或 host-key 策略。
+     */
+    ssh: z.object({
+        connections: z.record(
+            z.string(),
+            SshConnectionSchema,
+        ).default({}),
+    }).default({ connections: {} }),
 });
 
 export type ProjectConfig = z.infer<typeof ProjectConfigSchema>;

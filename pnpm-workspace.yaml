@@ -1,4 +1,8 @@
 packages:
   - "packages/*"
 allowBuilds:
+  # ssh2 的可选 cpu-features 原生加速并非 SSH 功能必需；禁止其安装脚本以减少供应链执行面。
+  cpu-features: false
   esbuild: false
+  # ssh2 安装脚本主要尝试可选原生优化；核心实现为 JavaScript，关闭脚本仍支持协议功能。
+  ssh2: false
