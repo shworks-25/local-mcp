@@ -8,6 +8,13 @@ dist/
 .env.*
 !.env.example
 
+# 项目根目录的 shmcp 配置可能包含真实服务器地址、Host Key 指纹和本机私钥路径。
+# 永远忽略真实项目配置；examples/ 下的公开示例配置允许进入版本控制。
+.shmcp.yaml
+.devmcp.yaml
+!examples/.shmcp.yaml
+!examples/.devmcp.yaml
+
 .idea/
 .vscode/
 

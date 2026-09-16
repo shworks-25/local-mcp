@@ -203,7 +203,22 @@ export const ProjectConfigSchema = z.object({
         '.vscode',
     ]),
 
-    protected: z.array(z.string()).default([]),
+    /**
+     * 项目配置只能在全局安全策略之上“追加保护”，不能声明 `!` 例外。
+     *
+     * `!pattern` 是全局策略内部使用的受控例外语法，例如允许公开的 `.env.example`。
+     * 如果项目自身也能声明例外，由于 protected patterns 按顺序裁定，恶意仓库就可以
+     * 用 `!.env`、`!.git/**` 等后置规则反向取消全局保护，形成配置级权限提升。
+     * 因此这里在配置解析边界直接拒绝所有项目级 `!` 规则，确保项目只能收紧安全边界。
+     */
+    protected: z.array(
+        z.string().refine(
+            (pattern) => !pattern.startsWith('!'),
+            {
+                message: '项目配置禁止使用 ! 解封受保护模式，只能追加保护，不能削弱全局底线',
+            },
+        ),
+    ).default([]),
 
     commands: z
         .record(
