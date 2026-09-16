@@ -12,6 +12,9 @@ export * from './security/path-guard.js';
 export * from './security/permissions.js';
 export * from './security/index.js';
 
+// Database Runtime 基础能力。SQLite 与网络数据库采用不同 Adapter 模型。
+export * from './database/index.js';
+
 export * from './filesystem/read.js';
 export * from './filesystem/write.js';
 export * from './filesystem/search.js';

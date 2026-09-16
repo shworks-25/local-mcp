@@ -43,6 +43,10 @@ import {
     registerOperationTools,
 } from './tools/operations.js';
 
+import {
+    registerDatabaseTools,
+} from './tools/database.js';
+
 const packageVersion = (
     JSON.parse(
         readFileSync(
@@ -102,6 +106,7 @@ export function buildServer(
     registerGitTools(server, runtime);
     registerShellTools(server);
     registerSshTools(server, runtime);
+    registerDatabaseTools(server, runtime);
     registerDeveloperTools(
         server,
         runtime,

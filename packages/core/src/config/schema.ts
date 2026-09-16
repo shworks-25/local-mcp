@@ -74,6 +74,33 @@ export const SecuritySchema = z.object({
     policies: z.array(SecurityPolicyRuleSchema).default([]),
 });
 
+/**
+ * Database Connection Registry 配置。
+ *
+ * 这里只保存连接声明，不保存密码等 secret。
+ * 运行时由 Database Resolver / Secret Provider 负责解析。
+ */
+export const DatabaseConnectionSchema = z.object({
+    type: z.enum(['mysql', 'postgres', 'sqlite']),
+    environment: z.string().optional(),
+    credentials: z.object({
+        username: z.string().optional(),
+        usernameEnv: z.string().optional(),
+        passwordEnv: z.string().optional(),
+    }).optional(),
+    endpoint: z.object({
+        type: z.enum(['direct', 'ssh']),
+        host: z.string().optional(),
+        port: z.number().int().min(1).max(65535).optional(),
+        sshConnection: z.string().optional(),
+    }).optional(),
+    file: z.string().optional(),
+});
+
+export const DatabaseSchema = z.object({
+    connections: z.record(z.string(), DatabaseConnectionSchema).default({}),
+});
+
 export type SecurityConfig = z.infer<typeof SecuritySchema>;
 
 export const GlobalConfigSchema = z.object({
