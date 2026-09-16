@@ -128,22 +128,27 @@ export function registerGitTools(
         'git_commit',
         {
             description:
-                '提交当前 Git 暂存区内容',
+                '创建 Git commit；可通过 paths 仅提交指定安全路径，省略 paths 时提交整个暂存区',
             inputSchema:
                 z.object({
                     project: z.string(),
                     message: z.string().min(1).max(2000),
+                    /**
+                     * 可选 pathspec 白名单。传入后底层使用 `--` 分隔参数并逐项执行安全检查，
+                     * 从而只提交这些路径，不会把 index 中其他已暂存文件意外带入 commit。
+                     */
+                    paths: z.array(z.string().min(1)).min(1).max(100).optional(),
                 }),
         },
-        async ({ project, message }) =>
+        async ({ project, message, paths }) =>
             safeResult(
                 async () => {
                     const resolved = await resolveProject(project);
-                    return gitCommit(resolved, message);
+                    return gitCommit(resolved, message, paths);
                 },
                 {
                     toolName: 'git_commit',
-                    params: { project, message },
+                    params: { project, message, paths },
                 },
             ),
     );
