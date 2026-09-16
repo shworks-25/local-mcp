@@ -5,8 +5,11 @@ import type {
 import * as z from 'zod/v4';
 
 import {
+    gitAdd,
+    gitCommit,
     gitDiff,
     gitLog,
+    gitPush,
     gitStatus,
     resolveProject,
 } from '@shworks/local-core';
@@ -93,6 +96,79 @@ export function registerGitTools(
                 {
                     toolName: 'git_diff',
                     params: { project, staged },
+                },
+            ),
+    );
+
+    server.registerTool(
+        'git_add',
+        {
+            description:
+                '将指定的安全项目路径加入 Git 暂存区',
+            inputSchema:
+                z.object({
+                    project: z.string(),
+                    paths: z.array(z.string().min(1)).min(1).max(100),
+                }),
+        },
+        async ({ project, paths }) =>
+            safeResult(
+                async () => {
+                    const resolved = await resolveProject(project);
+                    return gitAdd(resolved, paths);
+                },
+                {
+                    toolName: 'git_add',
+                    params: { project, paths },
+                },
+            ),
+    );
+
+    server.registerTool(
+        'git_commit',
+        {
+            description:
+                '提交当前 Git 暂存区内容',
+            inputSchema:
+                z.object({
+                    project: z.string(),
+                    message: z.string().min(1).max(2000),
+                }),
+        },
+        async ({ project, message }) =>
+            safeResult(
+                async () => {
+                    const resolved = await resolveProject(project);
+                    return gitCommit(resolved, message);
+                },
+                {
+                    toolName: 'git_commit',
+                    params: { project, message },
+                },
+            ),
+    );
+
+    server.registerTool(
+        'git_push',
+        {
+            description:
+                '将当前分支推送到 Git 远程仓库；默认 remote 为 origin',
+            inputSchema:
+                z.object({
+                    project: z.string(),
+                    remote: z.string().default('origin'),
+                    branch: z.string().optional(),
+                }),
+        },
+        async ({ project, remote, branch }) =>
+            safeResult(
+                async () => {
+                    const resolved = await resolveProject(project);
+                    return gitPush(resolved, remote, branch);
+                },
+                {
+                    toolName: 'git_push',
+                    params: { project, remote, branch },
                 },
             ),
     );

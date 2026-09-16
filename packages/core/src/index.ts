@@ -22,6 +22,7 @@ export * from './git/status.js';
 export * from './git/diff.js';
 export * from './git/log.js';
 export * from './git/branch.js';
+export * from './git/mutate.js';
 
 export * from './shell/process.js';
 export * from './shell/runner.js';
