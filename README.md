@@ -14,7 +14,7 @@ This project is currently in early development (`0.1.0`). The security model is 
 
 - Project registration, discovery, trust and permission management
 - Safe filesystem browsing, search, reading, writing and exact text replacement
-- Protected path rules for `.git`, `.env`, private keys, `.devmcp.yaml` and other sensitive files
+- Protected path rules for `.git`, `.env`, private keys, `.shmcp.yaml` and other sensitive files
 - Safe Git status, diff and log operations with external diff/textconv/fsmonitor protections
 - Restricted task execution using structured `program + args` instead of shell command strings
 - Project-root anchored executable allowlists
@@ -141,7 +141,7 @@ Default protected patterns include:
 *.pfx
 id_rsa
 id_ed25519
-.devmcp.yaml
+.shmcp.yaml
 ```
 
 Protected files cannot be read or modified through normal filesystem MCP tools.
@@ -318,7 +318,7 @@ All reasoning flows through standard chat, while code execution and test verific
 
 ## Project configuration
 
-Projects may define `.devmcp.yaml` for controlled tasks and project-specific restrictions.
+Projects may define `.shmcp.yaml` for controlled tasks and project-specific restrictions.
 
 Example:
 
@@ -351,7 +351,7 @@ commands:
 
 A project configuration can restrict the global policy further, but cannot elevate permissions beyond the global policy.
 
-`.devmcp.yaml` itself is protected and symbolic links are rejected.
+`.shmcp.yaml` itself is protected and symbolic links are rejected.
 
 ## Developer Runtime
 

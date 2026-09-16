@@ -1,0 +1,100 @@
+name: coure
+
+permissions:
+  read: true
+  write: true
+  delete: false
+  shell: restricted
+
+ignore:
+  - .git
+  - node_modules
+  - Pods
+  - DerivedData
+  - build
+  - dist
+  - vendor
+  - .idea
+  - .vscode
+
+protected:
+  - "*.mobileprovision"
+  - "*.cer"
+  - "*.p8"
+
+# SSH MCP 连接配置。
+# SSH 被设计为可复用的基础能力：除了 ssh_exec 外，后续 Database MCP 也可以
+# 引用这里的 connection name 建立 SSH Tunnel，而无需重复配置跳板机凭据。
+ssh:
+  connections:
+    # 连接名称由项目自行定义；调用 ssh_test_connection / ssh_exec 时使用该名称。
+    production-key:
+      # SSH 服务器或跳板机地址。这里必须替换成真实服务器地址。
+      host: server.example.com
+
+      # SSH 服务端口，通常为 22；如果服务器使用自定义端口请在这里修改。
+      port: 22
+
+      # 用户名可以直接使用 `username: deploy`，也可以像这里一样引用环境变量。
+      # 使用 usernameEnv 时，真实值例如 SSH_PROD_USER=deploy 写入本机 .env。
+      usernameEnv: SSH_PROD_USER
+
+      # 私钥认证。privateKeyPath 指向运行 local-mcp 的 Mac 上的私钥文件，
+      # 不要把私钥内容直接写进 .shmcp.yaml。
+      auth:
+        type: private-key
+        privateKeyPath: ~/.ssh/id_ed25519
+
+        # 如果私钥有 passphrase，在本机 .env 中配置：
+        # SSH_PROD_KEY_PASSPHRASE=你的真实私钥密码
+        # 如果私钥没有 passphrase，则删除下面这一行。
+        passphraseEnv: SSH_PROD_KEY_PASSPHRASE
+
+      # 必须固定服务器 Host Key 的 SHA256 fingerprint。
+      # 可先使用 ssh-keyscan 获取服务器公钥，再用 ssh-keygen -lf ... -E sha256
+      # 查看指纹，并通过可信渠道核对后替换下面的占位值。
+      # 该检查用于防止 MCP 自动信任未知 SSH 主机或遭遇中间人攻击。
+      hostKeyFingerprint: SHA256:REPLACE_WITH_REAL_SERVER_FINGERPRINT
+
+      # ssh_exec 只能运行这里明确列出的远程程序。
+      # 请遵循最小权限原则，只加入实际需要的程序，不要开放 sh/bash 等通用 shell。
+      allowedPrograms:
+        - whoami
+        - hostname
+        - uname
+        - systemctl
+        - journalctl
+
+commands:
+
+  backend-test:
+    program: go
+    args:
+      - test
+      - ./...
+    cwd: server
+    timeoutMs: 120000
+
+  backend-build:
+    program: go
+    args:
+      - build
+      - ./...
+    cwd: server
+    timeoutMs: 120000
+
+  ios-build:
+    program: xcodebuild
+    args:
+      - -scheme
+      - Coure
+      - build
+    cwd: ios
+    timeoutMs: 300000
+
+  android-test:
+    program: ./gradlew
+    args:
+      - test
+    cwd: android
+    timeoutMs: 300000

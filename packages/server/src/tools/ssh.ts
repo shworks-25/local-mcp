@@ -18,7 +18,7 @@ import { safeResult } from '../result.js';
  * 注册 SSH MCP 工具。
  *
  * 设计原则：
- * 1. MCP 请求只引用 .devmcp.yaml 中已经声明的命名 profile，不能临时注入 host/key/options；
+ * 1. MCP 请求只引用 .shmcp.yaml（或兼容读取的旧 .devmcp.yaml）中已经声明的命名 profile，不能临时注入 host/key/options；
  * 2. 远程执行采用 program + args，并受 profile.allowedPrograms 白名单约束；
  * 3. TCP tunnel 由 DeveloperRuntime 托管，runtime reset/连接关闭时自动回收；
  * 4. 工具返回永远不包含私钥、环境变量实际值或其他认证 secret。

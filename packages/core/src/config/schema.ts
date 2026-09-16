@@ -93,8 +93,13 @@ export const GlobalConfigSchema = z.object({
         '*.pfx',
         'id_rsa',
         'id_ed25519',
+        // 当前项目配置使用 .shmcp.yaml；旧 .devmcp.yaml 仍可能存在于升级前的工程中，
+        // 因此两种真实配置文件都继续受到保护，避免 AI 修改自身权限与远程连接策略。
+        '.shmcp.yaml',
         '.devmcp.yaml',
-        // examples/.devmcp.yaml 是公开示例配置，不应包含真实凭据；允许 AI 维护文档示例。
+        // examples/.shmcp.yaml 是公开示例配置，不应包含真实凭据；允许 AI 维护文档示例。
+        '!examples/.shmcp.yaml',
+        // 兼容旧仓库中的示例文件，迁移完成前仍允许维护，但真实项目配置保持受保护。
         '!examples/.devmcp.yaml',
     ]),
 
@@ -146,7 +151,7 @@ export type GlobalConfig = z.infer<typeof GlobalConfigSchema>;
 export const SshAuthSchema = z.discriminatedUnion('type', [
     z.object({
         type: z.literal('password'),
-        /** 密码只允许引用环境变量，禁止写入 .devmcp.yaml。 */
+        /** 密码只允许引用环境变量，禁止写入 .shmcp.yaml。 */
         passwordEnv: z.string().min(1),
     }),
     z.object({

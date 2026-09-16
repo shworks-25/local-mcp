@@ -105,30 +105,41 @@ export async function saveGlobalConfig(
 export async function loadProjectConfig(
     projectRoot: string,
 ): Promise<ProjectConfig> {
-    const file = join(
-        projectRoot,
+    /**
+     * `shmcp` 是当前对外暴露的 MCP 命令，因此项目级配置统一使用 `.shmcp.yaml`。
+     *
+     * 旧版本曾使用 `.devmcp.yaml`。这里保留只读兼容：优先读取新文件；只有新文件
+     * 不存在时才回退到旧文件。这样升级 shmcp 不会让已有工程立即丢失配置，同时
+     * 新工程和文档都可以统一迁移到新的命名。
+     */
+    const candidates = [
+        '.shmcp.yaml',
         '.devmcp.yaml',
-    );
+    ] as const;
 
-    try {
-        const info = await lstat(file);
-        if (info.isSymbolicLink()) {
-            throw new Error(
-                '.devmcp.yaml 不允许使用符号链接',
-            );
-        }
-    } catch (error) {
-        const nodeError = error as NodeJS.ErrnoException;
-        if (nodeError.code !== 'ENOENT') {
+    for (const filename of candidates) {
+        const file = join(projectRoot, filename);
+
+        try {
+            const info = await lstat(file);
+            if (info.isSymbolicLink()) {
+                throw new Error(
+                    `${filename} 不允许使用符号链接`,
+                );
+            }
+        } catch (error) {
+            const nodeError = error as NodeJS.ErrnoException;
+            if (nodeError.code === 'ENOENT') {
+                continue;
+            }
             throw error;
         }
+
+        const raw = await readYamlFile(file);
+        return ProjectConfigSchema.parse(raw ?? {});
     }
 
-    const raw = await readYamlFile(file);
-
-    return ProjectConfigSchema.parse(
-        raw ?? {},
-    );
+    return ProjectConfigSchema.parse({});
 }
 
 export function expandHomePath(

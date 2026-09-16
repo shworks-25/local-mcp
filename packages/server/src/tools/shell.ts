@@ -25,7 +25,7 @@ export function registerShellTools(
         'run_task',
         {
             description:
-                '执行 .devmcp.yaml 中预定义的安全项目任务',
+                '执行 .shmcp.yaml 中预定义的安全项目任务',
 
             inputSchema:
                 z.object({

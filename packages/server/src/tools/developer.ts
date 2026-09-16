@@ -176,7 +176,7 @@ export function registerDeveloperTools(
     server.registerTool(
         'dev_start',
         {
-            description: '启动 .devmcp.yaml 中预定义的长生命周期开发任务',
+            description: '启动 .shmcp.yaml 中预定义的长生命周期开发任务',
             inputSchema: z.object({
                 project: z.string().min(1),
                 task: z.string().min(1),
